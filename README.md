@@ -129,6 +129,24 @@ docker run -d --name ap-monitor --restart unless-stopped \
 
 (Build and push the image first, or use the Compose route to build locally.)
 
+### Option D — Home Assistant OS add-on (e.g. on a Raspberry Pi)
+
+This repo doubles as a Home Assistant **add-on repository** (`repository.yaml` +
+the `addon/` folder), so it installs natively on Home Assistant OS — Supervisor
+builds it, auto-starts it, and adds an *Open Web UI* button.
+
+1. Replace `YOURUSER` in `repository.yaml` and `addon/Dockerfile` with your
+   GitHub username, then push this repo to GitHub (public).
+2. In Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**,
+   add `https://github.com/YOURUSER/ap-monitor`.
+3. Create `share/ap-monitor/` (via the Samba or SSH add-on) containing your
+   `ssh_key` (private key) and a `config.yaml` with `ssh_key: /share/ap-monitor/ssh_key`
+   and `db_file: /data/history.db`.
+4. Install the **AP Monitor** add-on from the store and start it.
+
+Full details are in [`addon/DOCS.md`](addon/DOCS.md). The Pico W and other
+microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
+
 ## Configuration reference
 
 | Key | Description |

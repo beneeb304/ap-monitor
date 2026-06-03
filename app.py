@@ -12,9 +12,15 @@ import vendor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(HERE, "config.yaml")) as f:
+# Config path is overridable via env var (used by the Home Assistant add-on,
+# which keeps config in /share). Falls back to config.yaml next to the app.
+CONFIG_PATH = os.environ.get("AP_MONITOR_CONFIG") or os.path.join(HERE, "config.yaml")
+
+with open(CONFIG_PATH) as f:
     CFG = yaml.safe_load(f)
 
+# Relative db paths live next to the app; absolute paths (e.g. /data/history.db
+# in the add-on) are used as-is.
 DB_PATH = os.path.join(HERE, CFG.get("db_file", "history.db"))
 RETENTION = CFG.get("retention_days", 7)
 SAMPLE_INTERVAL = CFG.get("sample_interval", 30)

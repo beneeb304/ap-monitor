@@ -1,5 +1,6 @@
 # Local configuration (contains your network's IPs/hosts) — copy from config.example.yaml
-config.yaml
+# Anchored to repo root so it does NOT match addon/config.yaml (the HA manifest).
+/config.yaml
 
 # Runtime data
 history.db

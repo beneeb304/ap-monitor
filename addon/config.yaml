@@ -1,0 +1,23 @@
+# Home Assistant add-on manifest for AP Monitor.
+name: AP Monitor
+version: "1.0.0"
+slug: ap_monitor
+description: Live wifi client → access-point monitoring for OpenWrt / GL.iNet
+url: https://github.com/YOURUSER/ap-monitor
+arch:
+  - aarch64
+  - armv7
+  - armhf
+  - amd64
+init: false
+startup: application
+boot: auto
+# Web dashboard reachable at http://<home-assistant-ip>:8088
+ports:
+  8088/tcp: 8088
+ports_description:
+  8088/tcp: AP Monitor web dashboard
+webui: "http://[HOST]:[PORT:8088]"
+# /share holds your config.yaml + SSH key; /data persists the history DB.
+map:
+  - share:rw
