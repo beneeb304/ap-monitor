@@ -1,0 +1,20 @@
+services:
+  ap-monitor:
+    build: .
+    # Or use a prebuilt image instead of build:
+    # image: ghcr.io/YOURUSER/ap-monitor:latest
+    container_name: ap-monitor
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      # Your edited config. Set `ssh_key: /app/ssh_key` and
+      # `db_file: /data/history.db` inside it for the paths below.
+      - ./config.yaml:/app/config.yaml:ro
+      # SSH private key that is authorized on every AP/router (read-only).
+      - ${SSH_KEY:-~/.ssh/ap_monitor}:/app/ssh_key:ro
+      # Named volume so history survives container restarts/updates.
+      - ap-monitor-data:/data
+
+volumes:
+  ap-monitor-data:

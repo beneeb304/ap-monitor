@@ -1,0 +1,37 @@
+# Copy this file to config.yaml and edit for your network:
+#   cp config.example.yaml config.yaml
+#
+# config.yaml is git-ignored because it describes your private network.
+
+poll_interval: 5          # seconds between polls
+ssh_user: root
+ssh_port: 22
+ssh_timeout: 6
+
+# Path to the SSH private key used to log into every device (key auth only).
+#   Bare metal / Pi:  ~/.ssh/ap_monitor
+#   Docker:           /app/ssh_key   (mount your key there — see README)
+ssh_key: ~/.ssh/ap_monitor
+
+listen_host: 0.0.0.0
+listen_port: 8088
+
+# History database (SQLite).
+#   Bare metal / Pi:  history.db        (relative to the app directory)
+#   Docker:           /data/history.db  (mount a volume at /data to persist)
+db_file: history.db
+retention_days: 7         # how long to keep history + roam events
+
+# The device that runs the DHCP server, used to resolve MAC -> hostname/IP
+# from its /tmp/dhcp.leases. Usually your main router.
+dhcp_source: 192.168.1.1
+
+# Every AP/router to monitor. `name` is the label shown in the UI — using each
+# device's hostname is recommended. `host` is its LAN IP.
+devices:
+  - name: Router
+    host: 192.168.1.1
+  - name: AP-Living-Room
+    host: 192.168.1.2
+  - name: AP-Office
+    host: 192.168.1.3

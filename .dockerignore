@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+*.log
+history.db*
+config.yaml
+.git/

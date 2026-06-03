@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AP Monitor</title>
+<script src="/static/chart.umd.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
+  header { padding: 14px 20px; background: #161a22; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #242a35; }
+  h1 { font-size: 18px; margin: 0; }
+  .muted { color: #8a93a3; font-size: 12px; }
+  .aps { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ap-chip { padding: 6px 12px; border-radius: 8px; background: #1d232e; border: 1px solid #2c3442; font-size: 12px; }
+  .ap-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .dot.up { background: #3ddc84; } .dot.down { background: #ff5a5a; }
+  main { padding: 16px 20px; display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: #12161d; border: 1px solid #20262f; border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+  .panel h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input[type=search] { background: #0f1115; border: 1px solid #2c3442; border-radius: 8px; color: #e6e6e6; padding: 8px 12px; font-size: 14px; min-width: 220px; }
+  .btn { background: #1d232e; border: 1px solid #2c3442; color: #cdd5e0; border-radius: 7px; padding: 6px 11px; font-size: 12px; cursor: pointer; }
+  .btn.active { background: #2b3a5e; border-color: #3a4f7e; color: #fff; }
+  .group { margin-bottom: 22px; }
+  .group h2 { font-size: 15px; margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
+  .group h2 .count { color: #8a93a3; font-weight: normal; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #20262f; white-space: nowrap; }
+  th { color: #8a93a3; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  tr:hover td { background: #161a22; }
+  .sig { font-weight: 600; }
+  .s-good { color: #3ddc84; } .s-ok { color: #ffc857; } .s-bad { color: #ff7a7a; }
+  .band { padding: 2px 7px; border-radius: 5px; font-size: 11px; background: #243; }
+  .band.b5 { background: #2b3a5e; } .band.b6 { background: #3a2b5e; }
+  .err { color: #ff7a7a; font-size: 12px; }
+  code { color: #9ecbff; }
+  .event { padding: 7px 0; border-bottom: 1px solid #20262f; font-size: 13px; }
+  .event .t { color: #8a93a3; font-size: 11px; }
+  .event .arrow { color: #ffc857; }
+  mark { background: #5a4a00; color: #fff; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AP Monitor</h1>
+  <div class="aps" id="aps"></div>
+  <div class="controls" style="margin-left:auto">
+    <input type="search" id="search" placeholder="Search host / IP / MAC / AP…" autocomplete="off">
+    <button class="btn" id="alertBtn" title="Enable desktop roaming alerts">Enable alerts</button>
+    <span class="muted" id="status"></span>
+  </div>
+</header>
+<main>
+  <div>
+    <div class="panel">
+      <h3>Clients per AP
+        <span style="float:right">
+          <button class="btn win active" data-h="1">1h</button>
+          <button class="btn win" data-h="6">6h</button>
+          <button class="btn win" data-h="24">24h</button>
+        </span>
+      </h3>
+      <canvas id="chart" height="90"></canvas>
+    </div>
+    <div id="tables"></div>
+  </div>
+  <div class="panel">
+    <h3>Roaming events</h3>
+    <div id="events"><span class="muted">None yet.</span></div>
+  </div>
+</main>
+
+<script>
+const COLORS = ["#3ddc84","#5a8cff","#ffc857","#ff7ab8","#9d7aff","#4ad9d9","#ff9a5a"];
+let chart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true;
+
+function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
+function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
+function ago(ts){ const d=Math.max(0,Math.round(Date.now()/1000-ts)); return d+"s ago"; }
+function hhmmss(ts){ return new Date(ts*1000).toLocaleTimeString(); }
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function hl(s, q){ s=esc(s); if(!q) return s; const i=s.toLowerCase().indexOf(q); return i<0?s:s.slice(0,i)+"<mark>"+s.slice(i,i+q.length)+"</mark>"+s.slice(i+q.length); }
+
+async function refreshClients(){
+  let data;
+  try { data = await (await fetch("/api/clients")).json(); }
+  catch(e){ document.getElementById("status").textContent="fetch error"; return; }
+
+  document.getElementById("aps").innerHTML = (data.devices||[]).map(d =>
+    `<span class="ap-chip" title="${esc(d.error||'')}"><span class="dot ${d.online?'up':'down'}"></span>${esc(d.name)} <b>${d.client_count}</b>${d.online?'':' <span class="err">offline</span>'}</span>`
+  ).join("");
+  document.getElementById("status").textContent =
+    `${data.total_clients} clients · ${data.updated?ago(data.updated):'never'}`;
+
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const match = c => !q || [c.hostname,c.ip,c.mac,c.ap,c.ssid,c.band].some(v => (v||"").toLowerCase().includes(q));
+
+  const byAp = {};
+  (data.clients||[]).filter(match).forEach(c => { (byAp[c.ap]=byAp[c.ap]||[]).push(c); });
+  const order = (data.devices||[]).map(d=>d.name);
+
+  document.getElementById("tables").innerHTML = order.filter(ap=>byAp[ap]).map(ap => {
+    const rows = byAp[ap].map(c => `
+      <tr>
+        <td>${c.hostname?hl(c.hostname,q):'<span class="muted">unknown</span>'}</td>
+        <td><code>${hl(c.ip||'—',q)}</code></td>
+        <td><code>${hl(c.mac,q)}</code></td>
+        <td><span class="band ${bandClass(c.band)}">${esc(c.band)}</span></td>
+        <td>${esc(c.ssid||'—')}</td>
+        <td>${c.channel||'—'}</td>
+        <td class="sig ${sigClass(c.signal)}">${c.signal!=null?c.signal+' dBm':'—'}</td>
+        <td>${c.rx_mbps!=null?c.rx_mbps:'—'} / ${c.tx_mbps!=null?c.tx_mbps:'—'}</td>
+      </tr>`).join("");
+    return `<div class="group"><h2>${esc(ap)} <span class="count">${byAp[ap].length} clients</span></h2>
+      <table><thead><tr><th>Host</th><th>IP</th><th>MAC</th><th>Band</th><th>SSID</th><th>Ch</th><th>Signal</th><th>Rx/Tx Mbps</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }).join("") || `<p class="muted">${q?'No clients match “'+esc(q)+'”.':'No clients reported yet.'}</p>`;
+}
+
+async function refreshHistory(){
+  let h;
+  try { h = await (await fetch("/api/history?hours="+windowHours)).json(); }
+  catch(e){ return; }
+  const labels = h.timestamps.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  const datasets = h.aps.map((ap,i) => ({
+    label: ap, data: h.series[ap], borderColor: COLORS[i%COLORS.length],
+    backgroundColor: COLORS[i%COLORS.length]+"33", borderWidth: 2, pointRadius: 0, tension: .25, fill: false,
+  }));
+  if(!chart){
+    chart = new Chart(document.getElementById("chart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: { animation:false, responsive:true, interaction:{mode:'index',intersect:false},
+        scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:8},grid:{color:'#1c222b'}},
+                 y:{beginAtZero:true,ticks:{color:'#8a93a3',precision:0},grid:{color:'#1c222b'}} },
+        plugins:{ legend:{labels:{color:'#cdd5e0',boxWidth:12}} } }
+    });
+  } else {
+    chart.data.labels = labels; chart.data.datasets = datasets; chart.update();
+  }
+}
+
+async function refreshEvents(){
+  let ev;
+  try { ev = (await (await fetch("/api/events?limit=80")).json()).events; }
+  catch(e){ return; }
+  const el = document.getElementById("events");
+  el.innerHTML = ev.length ? ev.map(e => `
+    <div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+      <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)}
+      <span class="muted">${esc(e.band)}</span></div>`).join("") : '<span class="muted">None yet.</span>';
+
+  if(ev.length){
+    const newest = ev[0].ts;
+    if(!firstEvents && newest > lastEventTs && alertsOn && Notification.permission==="granted"){
+      ev.filter(e=>e.ts>lastEventTs).forEach(e =>
+        new Notification("AP roam: "+(e.hostname||e.mac), {body:`${e.from_ap} → ${e.to_ap} (${e.band})`}));
+    }
+    lastEventTs = newest; firstEvents = false;
+  }
+}
+
+document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".win").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); windowHours = +b.dataset.h; refreshHistory();
+}));
+document.getElementById("search").addEventListener("input", refreshClients);
+document.getElementById("alertBtn").addEventListener("click", async () => {
+  const p = await Notification.requestPermission();
+  alertsOn = p === "granted";
+  document.getElementById("alertBtn").textContent = alertsOn ? "Alerts on" : "Alerts blocked";
+  document.getElementById("alertBtn").classList.toggle("active", alertsOn);
+});
+
+refreshClients(); refreshHistory(); refreshEvents();
+setInterval(refreshClients, 3000);
+setInterval(refreshEvents, 4000);
+setInterval(refreshHistory, 15000);
+</script>
+</body>
+</html>
