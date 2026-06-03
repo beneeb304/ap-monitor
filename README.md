@@ -8,11 +8,15 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 
 - **Live client → AP mapping**, grouped by access point, refreshing every few seconds
 - **Per-client detail**: hostname, IP, MAC, band (2.4/5/6 GHz), SSID, channel, signal (color-coded), Rx/Tx rate
+- **Custom device names**: label any MAC with a friendly name that persists
+- **Vendor lookup**: offline MAC → manufacturer resolution, and detection of randomized/private MACs
+- **New-device detection**: alerts the first time a never-before-seen MAC joins
+- **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **Roaming events feed**: detects when a device moves between APs, with optional desktop notifications
-- **Search**: filter by hostname, IP, MAC, or AP
+- **Search**: filter by name, hostname, IP, MAC, vendor, or AP
 - **No agent on the routers** — pure SSH + `ubus`/`iwinfo`, which ship on OpenWrt
-- Self-contained: SQLite for history, Chart.js vendored locally (works fully offline)
+- Self-contained: SQLite for history, Chart.js + an OUI vendor database vendored locally (works fully offline)
 
 ## How it works
 
@@ -146,6 +150,8 @@ docker run -d --name ap-monitor --restart unless-stopped \
 
 ## API
 
-- `GET /api/clients` — current snapshot (devices + clients)
+- `GET /api/clients` — current snapshot (devices + clients, incl. name & vendor)
 - `GET /api/history?hours=6` — bucketed per-AP client counts
-- `GET /api/events?limit=80` — recent roaming events
+- `GET /api/events?limit=80` — recent roaming + new-device events
+- `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen
+- `POST /api/name` — set/clear a custom device name (JSON `{ "mac": "...", "name": "..." }`)

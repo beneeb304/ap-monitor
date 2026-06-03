@@ -12,6 +12,7 @@
   header { padding: 14px 20px; background: #161a22; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid #242a35; }
   h1 { font-size: 18px; margin: 0; }
   .muted { color: #8a93a3; font-size: 12px; }
+  .small { font-size: 11px; }
   .aps { display: flex; gap: 10px; flex-wrap: wrap; }
   .ap-chip { padding: 6px 12px; border-radius: 8px; background: #1d232e; border: 1px solid #2c3442; font-size: 12px; }
   .ap-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -21,7 +22,8 @@
   .panel { background: #12161d; border: 1px solid #20262f; border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
   .panel h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; }
   .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  input[type=search] { background: #0f1115; border: 1px solid #2c3442; border-radius: 8px; color: #e6e6e6; padding: 8px 12px; font-size: 14px; min-width: 220px; }
+  input[type=search], input.name { background: #0f1115; border: 1px solid #2c3442; border-radius: 8px; color: #e6e6e6; padding: 8px 12px; font-size: 14px; }
+  input[type=search] { min-width: 220px; }
   .btn { background: #1d232e; border: 1px solid #2c3442; color: #cdd5e0; border-radius: 7px; padding: 6px 11px; font-size: 12px; cursor: pointer; }
   .btn.active { background: #2b3a5e; border-color: #3a4f7e; color: #fff; }
   .group { margin-bottom: 22px; }
@@ -30,6 +32,7 @@
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #20262f; white-space: nowrap; }
   th { color: #8a93a3; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr { cursor: pointer; }
   tr:hover td { background: #161a22; }
   .sig { font-weight: 600; }
   .s-good { color: #3ddc84; } .s-ok { color: #ffc857; } .s-bad { color: #ff7a7a; }
@@ -37,10 +40,23 @@
   .band.b5 { background: #2b3a5e; } .band.b6 { background: #3a2b5e; }
   .err { color: #ff7a7a; font-size: 12px; }
   code { color: #9ecbff; }
-  .event { padding: 7px 0; border-bottom: 1px solid #20262f; font-size: 13px; }
+  .name-line { font-weight: 600; }
+  .event { padding: 7px 0; border-bottom: 1px solid #20262f; font-size: 13px; cursor: pointer; }
   .event .t { color: #8a93a3; font-size: 11px; }
   .event .arrow { color: #ffc857; }
+  .badge-new { background: #14502b; color: #6df0a0; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
   mark { background: #5a4a00; color: #fff; border-radius: 3px; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .overlay.show { display: flex; }
+  .modal { background: #12161d; border: 1px solid #2c3442; border-radius: 12px; width: min(680px, 94vw); max-height: 90vh; overflow: auto; padding: 18px 20px; }
+  .modal-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .modal h2 { margin: 0; font-size: 17px; }
+  .x { margin-left: auto; cursor: pointer; font-size: 20px; color: #8a93a3; background: none; border: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 10px; margin: 14px 0; }
+  .cell { background: #0f1115; border: 1px solid #20262f; border-radius: 8px; padding: 8px 10px; }
+  .cell .k { color: #8a93a3; font-size: 11px; }
+  .cell .v { font-size: 14px; margin-top: 2px; }
+  .roam-row { padding: 5px 0; border-bottom: 1px solid #20262f; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -48,8 +64,8 @@
   <h1>AP Monitor</h1>
   <div class="aps" id="aps"></div>
   <div class="controls" style="margin-left:auto">
-    <input type="search" id="search" placeholder="Search host / IP / MAC / AP…" autocomplete="off">
-    <button class="btn" id="alertBtn" title="Enable desktop roaming alerts">Enable alerts</button>
+    <input type="search" id="search" placeholder="Search name / host / IP / MAC / vendor / AP…" autocomplete="off">
+    <button class="btn" id="alertBtn" title="Enable desktop alerts">Enable alerts</button>
     <span class="muted" id="status"></span>
   </div>
 </header>
@@ -68,21 +84,27 @@
     <div id="tables"></div>
   </div>
   <div class="panel">
-    <h3>Roaming events</h3>
+    <h3>Events</h3>
     <div id="events"><span class="muted">None yet.</span></div>
   </div>
 </main>
 
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal"></div>
+</div>
+
 <script>
 const COLORS = ["#3ddc84","#5a8cff","#ffc857","#ff7ab8","#9d7aff","#4ad9d9","#ff9a5a"];
-let chart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true;
+let chart, clientChart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true, openMac = null;
 
 function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
 function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
 function ago(ts){ const d=Math.max(0,Math.round(Date.now()/1000-ts)); return d+"s ago"; }
 function hhmmss(ts){ return new Date(ts*1000).toLocaleTimeString(); }
+function when(ts){ return ts ? new Date(ts*1000).toLocaleString() : "—"; }
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function hl(s, q){ s=esc(s); if(!q) return s; const i=s.toLowerCase().indexOf(q); return i<0?s:s.slice(0,i)+"<mark>"+s.slice(i,i+q.length)+"</mark>"+s.slice(i+q.length); }
+function dispName(c){ return c.name || c.hostname || ""; }
 
 async function refreshClients(){
   let data;
@@ -96,16 +118,20 @@ async function refreshClients(){
     `${data.total_clients} clients · ${data.updated?ago(data.updated):'never'}`;
 
   const q = document.getElementById("search").value.trim().toLowerCase();
-  const match = c => !q || [c.hostname,c.ip,c.mac,c.ap,c.ssid,c.band].some(v => (v||"").toLowerCase().includes(q));
+  const match = c => !q || [dispName(c),c.hostname,c.ip,c.mac,c.vendor,c.ap,c.ssid,c.band].some(v => (v||"").toLowerCase().includes(q));
 
   const byAp = {};
   (data.clients||[]).filter(match).forEach(c => { (byAp[c.ap]=byAp[c.ap]||[]).push(c); });
   const order = (data.devices||[]).map(d=>d.name);
 
   document.getElementById("tables").innerHTML = order.filter(ap=>byAp[ap]).map(ap => {
-    const rows = byAp[ap].map(c => `
-      <tr>
-        <td>${c.hostname?hl(c.hostname,q):'<span class="muted">unknown</span>'}</td>
+    const rows = byAp[ap].map(c => {
+      const nm = dispName(c);
+      return `<tr data-mac="${esc(c.mac)}">
+        <td>
+          <div class="name-line">${nm?hl(nm,q):'<span class="muted">unknown</span>'}</div>
+          <div class="muted small">${hl(c.vendor||'',q)}</div>
+        </td>
         <td><code>${hl(c.ip||'—',q)}</code></td>
         <td><code>${hl(c.mac,q)}</code></td>
         <td><span class="band ${bandClass(c.band)}">${esc(c.band)}</span></td>
@@ -113,11 +139,15 @@ async function refreshClients(){
         <td>${c.channel||'—'}</td>
         <td class="sig ${sigClass(c.signal)}">${c.signal!=null?c.signal+' dBm':'—'}</td>
         <td>${c.rx_mbps!=null?c.rx_mbps:'—'} / ${c.tx_mbps!=null?c.tx_mbps:'—'}</td>
-      </tr>`).join("");
+      </tr>`;
+    }).join("");
     return `<div class="group"><h2>${esc(ap)} <span class="count">${byAp[ap].length} clients</span></h2>
-      <table><thead><tr><th>Host</th><th>IP</th><th>MAC</th><th>Band</th><th>SSID</th><th>Ch</th><th>Signal</th><th>Rx/Tx Mbps</th></tr></thead>
+      <table><thead><tr><th>Device</th><th>IP</th><th>MAC</th><th>Band</th><th>SSID</th><th>Ch</th><th>Signal</th><th>Rx/Tx Mbps</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
   }).join("") || `<p class="muted">${q?'No clients match “'+esc(q)+'”.':'No clients reported yet.'}</p>`;
+
+  document.querySelectorAll("#tables tbody tr").forEach(tr =>
+    tr.addEventListener("click", () => openClient(tr.dataset.mac)));
 }
 
 async function refreshHistory(){
@@ -130,17 +160,12 @@ async function refreshHistory(){
     backgroundColor: COLORS[i%COLORS.length]+"33", borderWidth: 2, pointRadius: 0, tension: .25, fill: false,
   }));
   if(!chart){
-    chart = new Chart(document.getElementById("chart"), {
-      type: "line",
-      data: { labels, datasets },
+    chart = new Chart(document.getElementById("chart"), { type: "line", data: { labels, datasets },
       options: { animation:false, responsive:true, interaction:{mode:'index',intersect:false},
         scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:8},grid:{color:'#1c222b'}},
                  y:{beginAtZero:true,ticks:{color:'#8a93a3',precision:0},grid:{color:'#1c222b'}} },
-        plugins:{ legend:{labels:{color:'#cdd5e0',boxWidth:12}} } }
-    });
-  } else {
-    chart.data.labels = labels; chart.data.datasets = datasets; chart.update();
-  }
+        plugins:{ legend:{labels:{color:'#cdd5e0',boxWidth:12}} } } });
+  } else { chart.data.labels = labels; chart.data.datasets = datasets; chart.update(); }
 }
 
 async function refreshEvents(){
@@ -148,20 +173,91 @@ async function refreshEvents(){
   try { ev = (await (await fetch("/api/events?limit=80")).json()).events; }
   catch(e){ return; }
   const el = document.getElementById("events");
-  el.innerHTML = ev.length ? ev.map(e => `
-    <div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
-      <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)}
-      <span class="muted">${esc(e.band)}</span></div>`).join("") : '<span class="muted">None yet.</span>';
+  el.innerHTML = ev.length ? ev.map(e => e.kind==="new"
+    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+         <span class="badge-new">NEW</span> <b>${esc(e.hostname||e.mac)}</b> <span class="muted">${esc(e.vendor||'')}</span></div>`
+    : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+         <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)} <span class="muted">${esc(e.band)}</span></div>`
+  ).join("") : '<span class="muted">None yet.</span>';
+  document.querySelectorAll("#events .event").forEach(d =>
+    d.addEventListener("click", () => openClient(d.dataset.mac)));
 
   if(ev.length){
     const newest = ev[0].ts;
     if(!firstEvents && newest > lastEventTs && alertsOn && Notification.permission==="granted"){
-      ev.filter(e=>e.ts>lastEventTs).forEach(e =>
-        new Notification("AP roam: "+(e.hostname||e.mac), {body:`${e.from_ap} → ${e.to_ap} (${e.band})`}));
+      ev.filter(e=>e.ts>lastEventTs).forEach(e => new Notification(
+        e.kind==="new" ? "New device: "+(e.hostname||e.mac) : "AP roam: "+(e.hostname||e.mac),
+        { body: e.kind==="new" ? (e.vendor||e.mac) : `${e.from_ap} → ${e.to_ap} (${e.band})` }));
     }
     lastEventTs = newest; firstEvents = false;
   }
 }
+
+async function openClient(mac){
+  openMac = mac;
+  let d;
+  try { d = await (await fetch("/api/client/"+encodeURIComponent(mac)+"?hours="+Math.max(24,windowHours))).json(); }
+  catch(e){ return; }
+  const cur = d.current || {};
+  const title = d.name || cur.hostname || mac;
+  document.getElementById("modal").innerHTML = `
+    <div class="modal-head">
+      <h2 id="mTitle">${esc(title)}</h2>
+      <button class="x" onclick="closeModal()">×</button>
+    </div>
+    <div class="controls" style="margin-top:8px">
+      <input class="name" id="nameInput" placeholder="Set a friendly name…" value="${esc(d.name||'')}">
+      <button class="btn" id="saveName">Save name</button>
+      <span class="muted" id="saveMsg"></span>
+    </div>
+    <div class="grid">
+      <div class="cell"><div class="k">Current AP</div><div class="v">${esc(cur.ap||'—')}</div></div>
+      <div class="cell"><div class="k">Band</div><div class="v">${esc(cur.band||'—')}</div></div>
+      <div class="cell"><div class="k">IP</div><div class="v"><code>${esc(cur.ip||'—')}</code></div></div>
+      <div class="cell"><div class="k">MAC</div><div class="v"><code>${esc(mac)}</code></div></div>
+      <div class="cell"><div class="k">Vendor</div><div class="v">${esc(d.vendor||'—')}</div></div>
+      <div class="cell"><div class="k">DHCP hostname</div><div class="v">${esc(cur.hostname||'—')}</div></div>
+      <div class="cell"><div class="k">First seen</div><div class="v small">${when(d.first_seen)}</div></div>
+      <div class="cell"><div class="k">Last seen</div><div class="v small">${when(d.last_seen)}</div></div>
+    </div>
+    <h3 class="muted">Signal history</h3>
+    <canvas id="clientChart" height="80"></canvas>
+    <h3 class="muted" style="margin-top:14px">Roaming history</h3>
+    <div id="roams">${d.roams.length ? d.roams.map(r =>
+      `<div class="roam-row"><span class="muted small">${when(r.ts)}</span> &nbsp; ${esc(r.from_ap)} <span class="arrow">→</span> ${esc(r.to_ap)} <span class="muted">${esc(r.band||'')}</span></div>`
+    ).join("") : '<span class="muted">No roams recorded.</span>'}</div>`;
+
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("saveName").addEventListener("click", () => saveName(mac));
+  document.getElementById("nameInput").addEventListener("keydown", e => { if(e.key==="Enter") saveName(mac); });
+
+  const labels = d.samples.map(s => new Date(s.ts*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  const aps = [...new Set(d.samples.map(s=>s.ap))];
+  if(clientChart) clientChart.destroy();
+  clientChart = new Chart(document.getElementById("clientChart"), {
+    type: "line",
+    data: { labels, datasets: [{ label: "Signal (dBm)", data: d.samples.map(s=>s.signal),
+      borderColor: "#5a8cff", backgroundColor: "#5a8cff22", borderWidth: 2, pointRadius: 0, tension: .25, fill: true,
+      segment: {} }] },
+    options: { animation:false, responsive:true,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ afterLabel: (i)=> "AP: "+(d.samples[i.dataIndex]||{}).ap } } },
+      scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:8},grid:{color:'#1c222b'}},
+               y:{ticks:{color:'#8a93a3'},grid:{color:'#1c222b'}} } }
+  });
+}
+
+async function saveName(mac){
+  const name = document.getElementById("nameInput").value;
+  await fetch("/api/name", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ mac, name }) });
+  document.getElementById("saveMsg").textContent = "saved";
+  document.getElementById("mTitle").textContent = name || mac;
+  refreshClients();
+}
+
+function closeModal(){ openMac=null; document.getElementById("overlay").classList.remove("show"); }
+document.getElementById("overlay").addEventListener("click", e => { if(e.target.id==="overlay") closeModal(); });
+document.addEventListener("keydown", e => { if(e.key==="Escape") closeModal(); });
 
 document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".win").forEach(x=>x.classList.remove("active"));

@@ -5,6 +5,8 @@ import time
 
 import paramiko
 
+import vendor
+
 # Remote shell run on each AP. Uses ubus + jsonfilter (both stock on OpenWrt).
 # Emits marker-delimited JSON blocks so the result is easy to parse.
 REMOTE_CMD = r"""
@@ -113,8 +115,10 @@ def poll_device(device, cfg):
         for st in assoc.get("results", []):
             rx = st.get("rx", {}) or {}
             tx = st.get("tx", {}) or {}
+            mac = (st.get("mac") or "").lower()
             clients.append({
-                "mac": (st.get("mac") or "").lower(),
+                "mac": mac,
+                "vendor": vendor.lookup(mac),
                 "ap": device["name"],
                 "ap_host": device["host"],
                 "radio": dev,

@@ -21,6 +21,7 @@ listen_port: 8088
 #   Docker:           /data/history.db  (mount a volume at /data to persist)
 db_file: history.db
 retention_days: 7         # how long to keep history + roam events
+sample_interval: 30       # seconds between per-client signal samples (drill-down)
 
 # The device that runs the DHCP server, used to resolve MAC -> hostname/IP
 # from its /tmp/dhcp.leases. Usually your main router.
