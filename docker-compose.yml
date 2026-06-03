@@ -2,7 +2,7 @@ services:
   ap-monitor:
     build: .
     # Or use a prebuilt image instead of build:
-    # image: ghcr.io/YOURUSER/ap-monitor:latest
+    # image: ghcr.io/beneeb304/ap-monitor:latest
     container_name: ap-monitor
     restart: unless-stopped
     ports:

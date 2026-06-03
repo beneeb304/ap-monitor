@@ -3,7 +3,7 @@
 # tiny and never duplicates the source. Point REPO/REF at your fork if needed.
 FROM python:3.12-slim
 
-ARG REPO=https://github.com/YOURUSER/ap-monitor
+ARG REPO=https://github.com/beneeb304/ap-monitor
 ARG REF=main
 
 RUN apt-get update \

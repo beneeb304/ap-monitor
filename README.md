@@ -64,7 +64,7 @@ Edit `config.yaml`: set `dhcp_source` (usually your main router) and list every 
 ### Option A — Raspberry Pi / bare metal (Python)
 
 ```bash
-git clone https://github.com/YOURUSER/ap-monitor.git
+git clone https://github.com/beneeb304/ap-monitor.git
 cd ap-monitor
 cp config.example.yaml config.yaml      # then edit it
 python3 -m venv venv
@@ -124,7 +124,7 @@ docker run -d --name ap-monitor --restart unless-stopped \
   -v /mnt/user/appdata/ap-monitor/config.yaml:/app/config.yaml:ro \
   -v /mnt/user/appdata/ap-monitor/ssh_key:/app/ssh_key:ro \
   -v /mnt/user/appdata/ap-monitor/data:/data \
-  ghcr.io/YOURUSER/ap-monitor:latest
+  ghcr.io/beneeb304/ap-monitor:latest
 ```
 
 (Build and push the image first, or use the Compose route to build locally.)
@@ -135,10 +135,9 @@ This repo doubles as a Home Assistant **add-on repository** (`repository.yaml` +
 the `addon/` folder), so it installs natively on Home Assistant OS — Supervisor
 builds it, auto-starts it, and adds an *Open Web UI* button.
 
-1. Replace `YOURUSER` in `repository.yaml` and `addon/Dockerfile` with your
-   GitHub username, then push this repo to GitHub (public).
+1. Push this repo to GitHub (public) — the URLs are already set to `beneeb304/ap-monitor`.
 2. In Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**,
-   add `https://github.com/YOURUSER/ap-monitor`.
+   add `https://github.com/beneeb304/ap-monitor`.
 3. Create `share/ap-monitor/` (via the Samba or SSH add-on) containing your
    `ssh_key` (private key) and a `config.yaml` with `ssh_key: /share/ap-monitor/ssh_key`
    and `db_file: /data/history.db`.

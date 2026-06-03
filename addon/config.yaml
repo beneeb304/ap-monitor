@@ -3,7 +3,7 @@ name: AP Monitor
 version: "1.0.0"
 slug: ap_monitor
 description: Live wifi client → access-point monitoring for OpenWrt / GL.iNet
-url: https://github.com/YOURUSER/ap-monitor
+url: https://github.com/beneeb304/ap-monitor
 arch:
   - aarch64
   - armv7
