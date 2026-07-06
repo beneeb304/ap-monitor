@@ -36,6 +36,7 @@ listen_port: 8088
 db_file: /data/history.db               # persisted by the add-on
 retention_days: 7
 sample_interval: 30
+offline_threshold: 3                     # failed polls before an AP counts as offline
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router
@@ -44,7 +45,40 @@ devices:
     host: 10.0.0.2
   - name: AP-2
     host: 10.0.0.3
+# Optional but recommended: push AP status into Home Assistant via MQTT.
+mqtt:
+  host: <home-assistant-ip>              # Mosquitto broker add-on
+  port: 1883
+  username: <mqtt-user>
+  password: <mqtt-pass>
 ```
+
+## AP offline alerts in Home Assistant
+
+With the `mqtt:` block set (and the **Mosquitto broker** + MQTT integration
+installed), each AP is auto-discovered as a device with:
+
+- `binary_sensor.<ap>_online` (device_class *connectivity*)
+- `sensor.<ap>_clients` (current client count)
+
+To get a phone notification when an AP drops, add an automation:
+
+```yaml
+alias: AP offline alert
+trigger:
+  - platform: state
+    entity_id: binary_sensor.ap_1_online
+    to: "off"
+    for: "00:01:00"
+action:
+  - service: notify.notify
+    data:
+      title: "AP offline"
+      message: "{{ trigger.to_state.attributes.friendly_name }} is unreachable"
+```
+
+The dashboard's events feed also logs every AP offline/online transition, and
+`GET /api/ap_status` exposes the current debounced state per AP.
 
 `db_file` must stay under `/data` so history survives add-on restarts/updates.
 `ssh_key` and `config.yaml` live under `/share`.

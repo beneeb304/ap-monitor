@@ -13,6 +13,7 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **New-device detection**: alerts the first time a never-before-seen MAC joins
 - **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
+- **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
 - **Roaming events feed**: detects when a device moves between APs, with optional desktop notifications
 - **Search**: filter by name, hostname, IP, MAC, vendor, or AP
 - **No agent on the routers** — pure SSH + `ubus`/`iwinfo`, which ship on OpenWrt
@@ -156,6 +157,8 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 | `listen_host` / `listen_port` | Where the web app binds (default `0.0.0.0:8088`) |
 | `db_file` | SQLite history path |
 | `retention_days` | How long history + roam events are kept |
+| `offline_threshold` | Consecutive failed polls before an AP is declared offline (default 3) |
+| `mqtt` | Optional block (`host`, `port`, `username`, `password`) — publishes AP status to MQTT with Home Assistant discovery; see [`addon/DOCS.md`](addon/DOCS.md) |
 | `dhcp_source` | Device whose `/tmp/dhcp.leases` resolves MAC → hostname/IP |
 | `devices[]` | List of `{ name, host }` for each AP/router |
 
@@ -169,6 +172,7 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 
 - `GET /api/clients` — current snapshot (devices + clients, incl. name & vendor)
 - `GET /api/history?hours=6` — bucketed per-AP client counts
-- `GET /api/events?limit=80` — recent roaming + new-device events
+- `GET /api/events?limit=80` — recent roaming, new-device, and AP offline/online events
+- `GET /api/ap_status` — current debounced online/offline state per AP (with `since` timestamp)
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen
 - `POST /api/name` — set/clear a custom device name (JSON `{ "mac": "...", "name": "..." }`)
