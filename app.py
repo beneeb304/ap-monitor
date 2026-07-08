@@ -7,6 +7,7 @@ import yaml
 from flask import Flask, jsonify, request, send_from_directory
 
 import db
+import mqtt_out
 import poller
 import vendor
 
@@ -24,6 +25,9 @@ with open(CONFIG_PATH) as f:
 DB_PATH = os.path.join(HERE, CFG.get("db_file", "history.db"))
 RETENTION = CFG.get("retention_days", 7)
 SAMPLE_INTERVAL = CFG.get("sample_interval", 30)
+# Consecutive failed polls before an AP counts as offline. One SSH timeout is
+# usually a hiccup, not an outage; debouncing avoids false alerts.
+OFFLINE_THRESHOLD = CFG.get("offline_threshold", 3)
 
 app = Flask(__name__, static_folder=None)
 
@@ -33,10 +37,20 @@ _lock = threading.Lock()
 
 def poll_loop():
     db.init(DB_PATH)
+    mqtt_pub = mqtt_out.setup(CFG)
+    fail_counts = {}
     while True:
         try:
             snap = poller.poll_all(CFG)
+            # Debounce the online flag; the raw error stays visible immediately.
+            for d in snap["devices"]:
+                fails = 0 if d["online"] else fail_counts.get(d["name"], 0) + 1
+                fail_counts[d["name"]] = fails
+                d["online"] = fails < OFFLINE_THRESHOLD
             db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL)
+            db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
+            if mqtt_pub:
+                mqtt_pub.publish(snap["devices"])
             with _lock:
                 _state.update(snap)
         except Exception as e:  # noqa: BLE001 - keep the loop alive on any failure
@@ -54,6 +68,11 @@ def api_clients():
         dict(c, name=names.get(c["mac"], "")) for c in state.get("clients", [])
     ]
     return jsonify(state)
+
+
+@app.route("/api/ap_status")
+def api_ap_status():
+    return jsonify(db.ap_status(DB_PATH))
 
 
 @app.route("/api/history")

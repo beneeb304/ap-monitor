@@ -23,6 +23,22 @@ db_file: history.db
 retention_days: 7         # how long to keep history + roam events
 sample_interval: 30       # seconds between per-client signal samples (drill-down)
 
+# Consecutive failed polls before an AP is declared offline (debounce).
+# With poll_interval: 5 the default 3 means ~15 s before an outage alert.
+offline_threshold: 3
+
+# Optional: publish AP status to an MQTT broker with Home Assistant discovery.
+# Each AP shows up in HA as a connectivity binary_sensor + client-count sensor,
+# so a phone notification when an AP drops is a one-line HA automation.
+# Uncomment and point at your broker (e.g. the HA Mosquitto add-on):
+# mqtt:
+#   host: 192.168.1.50      # broker IP (Home Assistant if using Mosquitto add-on)
+#   port: 1883
+#   username: mqtt_user
+#   password: mqtt_pass
+#   # base_topic: ap_monitor
+#   # discovery_prefix: homeassistant
+
 # The device that runs the DHCP server, used to resolve MAC -> hostname/IP
 # from its /tmp/dhcp.leases. Usually your main router.
 dhcp_source: 192.168.1.1

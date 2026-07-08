@@ -52,6 +52,17 @@ def init(path):
             CREATE TABLE IF NOT EXISTS device_names (
                 mac TEXT PRIMARY KEY, name TEXT, updated INTEGER
             );
+
+            CREATE TABLE IF NOT EXISTS ap_status (
+                ap TEXT PRIMARY KEY, online INTEGER NOT NULL,
+                since INTEGER NOT NULL, error TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS ap_events (
+                ts INTEGER NOT NULL, ap TEXT NOT NULL,
+                online INTEGER NOT NULL, error TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ap_events_ts ON ap_events(ts);
             """
         )
 
@@ -131,9 +142,45 @@ def record(path, snap, retention_days, sample_interval):
         conn.execute("DELETE FROM ap_counts WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM roam_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM new_device_events WHERE ts < ?", (cutoff,))
+        conn.execute("DELETE FROM ap_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_samples WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_loc WHERE last_ts < ?", (cutoff,))
     return new_events
+
+
+def record_ap_status(path, ts, statuses):
+    """Persist debounced AP online/offline state. `statuses` is a list of
+    {name, online, error}. Inserts an ap_events row on every transition and
+    returns those transitions as event dicts (for the feed / MQTT)."""
+    new_events = []
+    with _write_lock, _connect(path) as conn:
+        prev = {r["ap"]: r["online"] for r in conn.execute("SELECT ap, online FROM ap_status")}
+        for s in statuses:
+            ap, online, error = s["name"], 1 if s["online"] else 0, s.get("error")
+            if prev.get(ap) == online:
+                continue
+            conn.execute(
+                "INSERT INTO ap_status (ap,online,since,error) VALUES (?,?,?,?) "
+                "ON CONFLICT(ap) DO UPDATE SET online=excluded.online, "
+                "since=excluded.since, error=excluded.error",
+                (ap, online, ts, error),
+            )
+            # Only announce transitions, not the very first time we see an AP.
+            if prev.get(ap) is not None:
+                conn.execute(
+                    "INSERT INTO ap_events (ts,ap,online,error) VALUES (?,?,?,?)",
+                    (ts, ap, online, error),
+                )
+                new_events.append({"ts": ts, "kind": "ap_online" if online else "ap_offline",
+                                   "ap": ap, "error": error or ""})
+    return new_events
+
+
+def ap_status(path):
+    """Last debounced state per AP: {ap: {online, since, error}}."""
+    with _connect(path) as conn:
+        return {r["ap"]: {"online": bool(r["online"]), "since": r["since"], "error": r["error"]}
+                for r in conn.execute("SELECT ap, online, since, error FROM ap_status")}
 
 
 def history(path, hours):
@@ -160,14 +207,17 @@ def history(path, hours):
 
 
 def events(path, limit=100):
-    """Merged roam + new-device feed, newest first."""
+    """Merged roam + new-device + AP up/down feed, newest first."""
     with _connect(path) as conn:
         rows = conn.execute(
-            "SELECT ts, 'roam' AS kind, mac, hostname, from_ap, to_ap, band, NULL AS vendor "
-            "FROM roam_events "
+            "SELECT ts, 'roam' AS kind, mac, hostname, from_ap, to_ap, band, "
+            "NULL AS vendor, NULL AS ap, NULL AS error FROM roam_events "
             "UNION ALL "
-            "SELECT ts, 'new' AS kind, mac, hostname, NULL, NULL, NULL, vendor "
-            "FROM new_device_events "
+            "SELECT ts, 'new' AS kind, mac, hostname, NULL, NULL, NULL, vendor, "
+            "NULL, NULL FROM new_device_events "
+            "UNION ALL "
+            "SELECT ts, CASE online WHEN 1 THEN 'ap_online' ELSE 'ap_offline' END, "
+            "NULL, NULL, NULL, NULL, NULL, NULL, ap, error FROM ap_events "
             "ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
