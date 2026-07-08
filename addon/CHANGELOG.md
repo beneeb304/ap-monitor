@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- Security: SSH host keys are now pinned on first connect and changes are
+  rejected (detects AP impersonation/MITM). Pins live in `/data/known_hosts`;
+  delete an AP's line there after reflashing it to re-pin.
+
 ## 1.3.1
 
 - Removed the dashboard "Enable alerts" button: browser notifications are

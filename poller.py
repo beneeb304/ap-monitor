@@ -7,6 +7,8 @@ import paramiko
 
 import vendor
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 # Remote shell run on each AP. Uses ubus + jsonfilter (both stock on OpenWrt).
 # Emits marker-delimited JSON blocks so the result is easy to parse.
 REMOTE_CMD = r"""
@@ -32,9 +34,37 @@ def band_from_freq(mhz):
     return "6 GHz"
 
 
+def _known_hosts_path(cfg):
+    """Pinned host keys live next to the history DB so they persist across
+    add-on updates (/data), unlike the app dir which is wiped on rebuild."""
+    p = cfg.get("known_hosts_file")
+    if not p:
+        db_dir = os.path.dirname(os.path.join(HERE, os.path.expanduser(cfg.get("db_file", "history.db"))))
+        p = os.path.join(db_dir, "known_hosts")
+    return os.path.expanduser(p)
+
+
+class _PinOnFirstUse(paramiko.MissingHostKeyPolicy):
+    """Trust-on-first-use: record an unknown host's key and accept it.
+    Paramiko itself rejects a *changed* key (BadHostKeyException) before this
+    policy is ever consulted, so a repinned/impersonated AP fails the poll.
+    To re-pin after reflashing an AP, delete its line from the known_hosts file."""
+
+    def __init__(self, path):
+        self._path = path
+
+    def missing_host_key(self, client, hostname, key):
+        client.get_host_keys().add(hostname, key.get_name(), key)
+        client.save_host_keys(self._path)
+        print(f"Pinned host key for {hostname} ({key.get_name()})")
+
+
 def _ssh_run(host, cfg, command):
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    kh_path = _known_hosts_path(cfg)
+    if os.path.exists(kh_path):
+        client.load_host_keys(kh_path)
+    client.set_missing_host_key_policy(_PinOnFirstUse(kh_path))
     try:
         client.connect(
             hostname=host,

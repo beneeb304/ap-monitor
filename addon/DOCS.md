@@ -113,5 +113,9 @@ action:
 
 - The add-on only reads from your devices (`ubus`/`iwinfo` + the DHCP lease
   file). It never changes router configuration.
+- Each AP's SSH host key is pinned on first connect (stored in
+  `/data/known_hosts`) and changes are rejected — a key mismatch shows the AP
+  as offline with a `BadHostKeyException` error. If you reflash an AP, delete
+  its line from `/data/known_hosts` and it re-pins on the next poll.
 - For push notifications, use an HA automation on the MQTT event topics above —
   the on-page events feed shows the same history.
