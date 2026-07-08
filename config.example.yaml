@@ -11,6 +11,7 @@ ssh_timeout: 6
 # Path to the SSH private key used to log into every device (key auth only).
 #   Bare metal / Pi:  ~/.ssh/ap_monitor
 #   Docker:           /app/ssh_key   (mount your key there — see README)
+#   HA add-on:        /share/ap-monitor/ssh_key   (see addon/DOCS.md)
 ssh_key: ~/.ssh/ap_monitor
 
 listen_host: 0.0.0.0
@@ -19,6 +20,7 @@ listen_port: 8088
 # History database (SQLite).
 #   Bare metal / Pi:  history.db        (relative to the app directory)
 #   Docker:           /data/history.db  (mount a volume at /data to persist)
+#   HA add-on:        /data/history.db  (persisted across add-on updates)
 db_file: history.db
 retention_days: 7         # how long to keep history + roam events
 sample_interval: 30       # seconds between per-client signal samples (drill-down)
@@ -30,7 +32,8 @@ offline_threshold: 3
 # Optional: publish AP status to an MQTT broker with Home Assistant discovery.
 # Each AP shows up in HA as a connectivity binary_sensor + client-count sensor,
 # so a phone notification when an AP drops is a one-line HA automation.
-# Uncomment and point at your broker (e.g. the HA Mosquitto add-on):
+# Uncomment and point at your broker. With the HA Mosquitto add-on, `host` is
+# your Home Assistant IP:
 # mqtt:
 #   host: 192.168.1.50      # broker IP (Home Assistant if using Mosquitto add-on)
 #   port: 1883

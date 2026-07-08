@@ -14,7 +14,9 @@
   .muted { color: #8a93a3; font-size: 12px; }
   .small { font-size: 11px; }
   .aps { display: flex; gap: 10px; flex-wrap: wrap; }
-  .ap-chip { padding: 6px 12px; border-radius: 8px; background: #1d232e; border: 1px solid #2c3442; font-size: 12px; }
+  .ap-chip { padding: 6px 12px; border-radius: 8px; background: #1d232e; border: 1px solid #2c3442; font-size: 12px; cursor: pointer; user-select: none; }
+  .ap-chip:hover { border-color: #3a4f7e; }
+  .ap-chip.active { background: #2b3a5e; border-color: #3a4f7e; color: #fff; }
   .ap-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .dot.up { background: #3ddc84; } .dot.down { background: #ff5a5a; }
   main { padding: 16px 20px; display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
@@ -95,7 +97,7 @@
 
 <script>
 const COLORS = ["#3ddc84","#5a8cff","#ffc857","#ff7ab8","#9d7aff","#4ad9d9","#ff9a5a"];
-let chart, clientChart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true, openMac = null;
+let chart, clientChart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true, openMac = null, apFilter = null;
 
 function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
 function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
@@ -112,13 +114,19 @@ async function refreshClients(){
   catch(e){ document.getElementById("status").textContent="fetch error"; return; }
 
   document.getElementById("aps").innerHTML = (data.devices||[]).map(d =>
-    `<span class="ap-chip" title="${esc(d.error||'')}"><span class="dot ${d.online?'up':'down'}"></span>${esc(d.name)} <b>${d.client_count}</b>${d.online?'':' <span class="err">offline</span>'}</span>`
+    `<span class="ap-chip ${apFilter===d.name?'active':''}" data-ap="${esc(d.name)}" title="${esc(d.error||'Click to filter clients by this AP')}"><span class="dot ${d.online?'up':'down'}"></span>${esc(d.name)} <b>${d.client_count}</b>${d.online?'':' <span class="err">offline</span>'}</span>`
   ).join("");
+  document.querySelectorAll("#aps .ap-chip").forEach(chip =>
+    chip.addEventListener("click", () => {
+      apFilter = apFilter === chip.dataset.ap ? null : chip.dataset.ap;
+      refreshClients();
+    }));
   document.getElementById("status").textContent =
     `${data.total_clients} clients · ${data.updated?ago(data.updated):'never'}`;
 
   const q = document.getElementById("search").value.trim().toLowerCase();
-  const match = c => !q || [dispName(c),c.hostname,c.ip,c.mac,c.vendor,c.ap,c.ssid,c.band].some(v => (v||"").toLowerCase().includes(q));
+  const match = c => (!apFilter || c.ap === apFilter) &&
+    (!q || [dispName(c),c.hostname,c.ip,c.mac,c.vendor,c.ap,c.ssid,c.band].some(v => (v||"").toLowerCase().includes(q)));
 
   const byAp = {};
   (data.clients||[]).filter(match).forEach(c => { (byAp[c.ap]=byAp[c.ap]||[]).push(c); });
@@ -144,7 +152,7 @@ async function refreshClients(){
     return `<div class="group"><h2>${esc(ap)} <span class="count">${byAp[ap].length} clients</span></h2>
       <table><thead><tr><th>Device</th><th>IP</th><th>MAC</th><th>Band</th><th>SSID</th><th>Ch</th><th>Signal</th><th>Rx/Tx Mbps</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
-  }).join("") || `<p class="muted">${q?'No clients match “'+esc(q)+'”.':'No clients reported yet.'}</p>`;
+  }).join("") || `<p class="muted">${q?'No clients match “'+esc(q)+'”.':apFilter?'No clients on '+esc(apFilter)+'.':'No clients reported yet.'}</p>`;
 
   document.querySelectorAll("#tables tbody tr").forEach(tr =>
     tr.addEventListener("click", () => openClient(tr.dataset.mac)));
