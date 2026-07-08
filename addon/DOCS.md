@@ -113,5 +113,5 @@ action:
 
 - The add-on only reads from your devices (`ubus`/`iwinfo` + the DHCP lease
   file). It never changes router configuration.
-- Desktop roaming notifications need a secure context, so they only work at
-  `http://localhost`; the on-page events feed works everywhere.
+- For push notifications, use an HA automation on the MQTT event topics above —
+  the on-page events feed shows the same history.

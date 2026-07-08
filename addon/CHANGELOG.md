@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+- Removed the dashboard "Enable alerts" button: browser notifications are
+  blocked on plain-http origins anyway. Use an HA automation on the
+  `ap_monitor/events/*` MQTT topics for notifications instead.
+
 ## 1.3.0
 
 - MQTT: new-device, roam, and AP offline/online events are now published to

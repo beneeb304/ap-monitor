@@ -67,7 +67,6 @@
   <div class="aps" id="aps"></div>
   <div class="controls" style="margin-left:auto">
     <input type="search" id="search" placeholder="Search name / host / IP / MAC / vendor / AP…" autocomplete="off">
-    <button class="btn" id="alertBtn" title="Enable desktop alerts">Enable alerts</button>
     <span class="muted" id="status"></span>
   </div>
 </header>
@@ -97,7 +96,7 @@
 
 <script>
 const COLORS = ["#3ddc84","#5a8cff","#ffc857","#ff7ab8","#9d7aff","#4ad9d9","#ff9a5a"];
-let chart, clientChart, windowHours = 1, alertsOn = false, lastEventTs = 0, firstEvents = true, openMac = null, apFilter = null;
+let chart, clientChart, windowHours = 1, openMac = null, apFilter = null;
 
 function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
 function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
@@ -194,20 +193,6 @@ async function refreshEvents(){
   ).join("") : '<span class="muted">None yet.</span>';
   document.querySelectorAll("#events .event[data-mac]").forEach(d =>
     d.addEventListener("click", () => openClient(d.dataset.mac)));
-
-  if(ev.length){
-    const newest = ev[0].ts;
-    if(!firstEvents && newest > lastEventTs && alertsOn && Notification.permission==="granted"){
-      ev.filter(e=>e.ts>lastEventTs).forEach(e => new Notification(
-        e.kind==="ap_offline" ? "AP OFFLINE: "+e.ap :
-        e.kind==="ap_online" ? "AP back online: "+e.ap :
-        e.kind==="new" ? "New device: "+(e.hostname||e.mac) : "AP roam: "+(e.hostname||e.mac),
-        { body: e.kind==="ap_offline" ? (e.error||"unreachable") :
-                e.kind==="ap_online" ? "" :
-                e.kind==="new" ? (e.vendor||e.mac) : `${e.from_ap} → ${e.to_ap} (${e.band})` }));
-    }
-    lastEventTs = newest; firstEvents = false;
-  }
 }
 
 async function openClient(mac){
@@ -281,12 +266,6 @@ document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () =>
   b.classList.add("active"); windowHours = +b.dataset.h; refreshHistory();
 }));
 document.getElementById("search").addEventListener("input", refreshClients);
-document.getElementById("alertBtn").addEventListener("click", async () => {
-  const p = await Notification.requestPermission();
-  alertsOn = p === "granted";
-  document.getElementById("alertBtn").textContent = alertsOn ? "Alerts on" : "Alerts blocked";
-  document.getElementById("alertBtn").classList.toggle("active", alertsOn);
-});
 
 refreshClients(); refreshHistory(); refreshEvents();
 setInterval(refreshClients, 3000);
