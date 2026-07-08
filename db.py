@@ -4,6 +4,8 @@ import sqlite3
 import threading
 import time
 
+import vendor
+
 _write_lock = threading.Lock()
 _last_sample_ts = 0
 
@@ -116,7 +118,8 @@ def record(path, snap, retention_days, sample_interval):
                         (ts, mac, c.get("hostname") or "", vend),
                     )
                     new_events.append({"ts": ts, "kind": "new", "mac": mac,
-                                       "hostname": c.get("hostname") or "", "vendor": vend})
+                                       "hostname": c.get("hostname") or "", "vendor": vend,
+                                       "randomized": vendor.is_randomized(mac)})
             else:
                 conn.execute("UPDATE seen_devices SET last_seen=? WHERE mac=?", (ts, mac))
 

@@ -4,20 +4,26 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## P1 — high value, low effort
 
-1. **Publish events to MQTT** — new-device and roam events currently only appear in the web feed. Publish them to `ap_monitor/events` (and/or an HA `event` entity) so Home Assistant automations can notify on "new device joined". ~20 lines in the poll loop.
-2. **SSH host-key pinning** — poller uses `AutoAddPolicy` (accepts any host key). Record each device's host key on first connect and reject changes, to detect AP impersonation/MITM.
+1. **SSH host-key pinning** — poller uses `AutoAddPolicy` (accepts any host key). Record each device's host key on first connect and reject changes, to detect AP impersonation/MITM. Do as its own deploy (changes poller connection behavior).
 
 ## P2 — reliability & health telemetry
 
-3. **AP health metrics over the existing SSH session** — uptime (detects silent reboots), load average, free memory, radio channel utilization (`ubus iwinfo survey`). Expose as extra HA sensors per AP via MQTT discovery. A rebooting AP with rising memory pressure is the classic OpenWrt failure signature; this makes the *cause* of AP drops diagnosable.
-4. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
-5. **Roam-storm / flapping detection** — a client bouncing between APs every few seconds indicates channel overlap or a sick radio; emit a `flapping` event when a MAC roams more than N times in M minutes.
+2. **AP health metrics over the existing SSH session** — uptime (detects silent reboots), load average, free memory, radio channel utilization (`ubus iwinfo survey`). Expose as extra HA sensors per AP via MQTT discovery. A rebooting AP with rising memory pressure is the classic OpenWrt failure signature; this makes the *cause* of AP drops diagnosable.
+3. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
+4. **Roam-storm / flapping detection** — a client bouncing between APs every few seconds indicates channel overlap or a sick radio; emit a `flapping` event when a MAC roams more than N times in M minutes.
 
 ## P3 — security
 
-6. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
-7. **Randomized-MAC handling** — flag never-before-seen locally-administered MACs separately (vendor.py already detects them) to cut alert noise from iPhone/Android MAC rotation.
+5. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
 
 ## P4 — nice to have
 
-8. **Poller self-watchdog** — mostly covered by the MQTT availability/LWT topic (HA alerts if AP Monitor goes unavailable); could add a heartbeat sensor with last-poll age.
+6. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
+
+## Done
+
+- **Publish events to MQTT** — new-device/roam/AP up-down events published to `ap_monitor/events/<kind>` (v1.3.0, 2026-07).
+- **Randomized-MAC handling** — new locally-administered MACs go to a separate `new_random` topic (v1.3.0, 2026-07).
+- **Add-on CHANGELOG.md** — rendered by HA in the update dialog (v1.3.0, 2026-07).
+- **Dashboard AP quick-filter** — click an AP chip in the header to filter the client tables to that AP (v1.2.0, 2026-07).
+- ~~Poller self-watchdog~~ — dropped: covered by the MQTT availability/LWT topic plus HA's add-on watchdog.

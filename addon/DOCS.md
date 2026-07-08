@@ -80,6 +80,32 @@ action:
 The dashboard's events feed also logs every AP offline/online transition, and
 `GET /api/ap_status` exposes the current debounced state per AP.
 
+## Event topics
+
+Every event is also published as JSON to a per-kind MQTT topic (not retained):
+
+- `ap_monitor/events/new` — never-before-seen device with a real (vendor) MAC
+- `ap_monitor/events/new_random` — new locally-administered MAC (phone MAC
+  rotation; usually not alert-worthy — kept separate to avoid alert noise)
+- `ap_monitor/events/roam` — client moved between APs
+- `ap_monitor/events/ap_offline` / `ap_monitor/events/ap_online`
+
+Example automation — notify when a genuinely new device joins:
+
+```yaml
+alias: New device on wifi
+trigger:
+  - platform: mqtt
+    topic: ap_monitor/events/new
+action:
+  - service: notify.notify
+    data:
+      title: "New wifi device"
+      message: >-
+        {{ trigger.payload_json.hostname or trigger.payload_json.mac }}
+        ({{ trigger.payload_json.vendor }})
+```
+
 `db_file` must stay under `/data` so history survives add-on restarts/updates.
 `ssh_key` and `config.yaml` live under `/share`.
 

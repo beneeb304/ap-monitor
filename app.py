@@ -47,10 +47,11 @@ def poll_loop():
                 fails = 0 if d["online"] else fail_counts.get(d["name"], 0) + 1
                 fail_counts[d["name"]] = fails
                 d["online"] = fails < OFFLINE_THRESHOLD
-            db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL)
-            db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
+            events = db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL)
+            events += db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
             if mqtt_pub:
                 mqtt_pub.publish(snap["devices"])
+                mqtt_pub.publish_events(events)
             with _lock:
                 _state.update(snap)
         except Exception as e:  # noqa: BLE001 - keep the loop alive on any failure

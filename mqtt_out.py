@@ -81,6 +81,19 @@ class Publisher:
             self._client.publish(f"{self._base}/{slug}/clients",
                                  str(s.get("client_count", 0)), retain=True)
 
+    def publish_events(self, events):
+        """Publish each event as JSON to a per-kind topic:
+        ap_monitor/events/new, .../new_random (locally-administered MACs,
+        i.e. phone MAC rotation — usually not alert-worthy), .../roam,
+        .../ap_online, .../ap_offline. Not retained: events are moments,
+        and a retained "new device" would re-fire automations on HA restart.
+        """
+        for ev in events:
+            kind = ev.get("kind", "unknown")
+            if kind == "new" and ev.get("randomized"):
+                kind = "new_random"
+            self._client.publish(f"{self._base}/events/{kind}", json.dumps(ev))
+
 
 def setup(cfg):
     """Return a Publisher if config.yaml has an `mqtt:` block, else None."""
