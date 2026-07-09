@@ -37,6 +37,7 @@ db_file: /data/history.db               # persisted by the add-on
 retention_days: 7
 sample_interval: 30
 offline_threshold: 3                     # failed polls before an AP counts as offline
+temp_unit: F                             # dashboard temp display: C (default) or F
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router

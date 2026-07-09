@@ -85,7 +85,11 @@ def api_history():
 @app.route("/api/health")
 def api_health():
     hours = float(request.args.get("hours", 24))
-    return jsonify(db.health(DB_PATH, hours))
+    data = db.health(DB_PATH, hours)
+    # Storage and MQTT stay °C (HA converts per its unit system); the
+    # dashboard converts at display time when temp_unit: F is configured.
+    data["temp_unit"] = str(CFG.get("temp_unit", "C")).upper()
+    return jsonify(data)
 
 
 @app.route("/api/events")

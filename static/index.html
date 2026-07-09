@@ -239,8 +239,13 @@ async function refreshHealth(){
   const line = (label, data, color, axis) => ({ label, data, borderColor: color,
     borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: axis, spanGaps: true });
 
+  const degF = h.temp_unit === "F";
+  const cvt = c => c==null ? null : degF ? Math.round((c*9/5+32)*10)/10 : c;
+  const degLbl = degF ? "°F" : "°C";
+
   h.aps.forEach(ap => {
     const s = h.series[ap], last = s.ts.length-1;
+    s.temp = s.temp.map(cvt);
     const hasTemp = s.temp.some(v => v!=null);
     const hasNoise = s.noise_24.some(v => v!=null) || s.noise_5.some(v => v!=null);
     const el = document.createElement("div");
@@ -250,7 +255,7 @@ async function refreshHealth(){
         <div class="cell"><div class="k">Uptime</div><div class="v">${fmtUptime(s.uptime[last])}</div></div>
         <div class="cell"><div class="k">Load (1m)</div><div class="v">${s.load1[last]!=null?s.load1[last]:'—'}</div></div>
         <div class="cell"><div class="k">Memory used</div><div class="v">${s.mem_used_pct[last]!=null?s.mem_used_pct[last]+'%':'—'}</div></div>
-        <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+'°C':'—'}</div></div>
+        <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+degLbl:'—'}</div></div>
         <div class="cell"><div class="k">Noise 2.4/5 GHz</div><div class="v">${s.noise_24[last]!=null?s.noise_24[last]:'—'} / ${s.noise_5[last]!=null?s.noise_5[last]:'—'} dBm</div></div>
       </div>
       <canvas height="70"></canvas>
@@ -268,13 +273,13 @@ async function refreshHealth(){
     const c2 = el.querySelector(".c2");
     if(c2){
       const ds = [];
-      if(hasTemp) ds.push(line("Temp °C", s.temp, COLORS[6], "y"));
+      if(hasTemp) ds.push(line("Temp "+degLbl, s.temp, COLORS[6], "y"));
       if(s.noise_24.some(v=>v!=null)) ds.push(line("Noise 2.4 GHz", s.noise_24, COLORS[0], "y2"));
       if(s.noise_5.some(v=>v!=null)) ds.push(line("Noise 5 GHz", s.noise_5, COLORS[4], "y2"));
       if(s.noise_6.some(v=>v!=null)) ds.push(line("Noise 6 GHz", s.noise_6, COLORS[5], "y2"));
       healthCharts[ap+"_2"] = new Chart(c2, {
         type: "line", data: { labels, datasets: ds },
-        options: chartOpts('°C', 'noise dBm', {})
+        options: chartOpts(degLbl, 'noise dBm', {})
       });
     }
   });

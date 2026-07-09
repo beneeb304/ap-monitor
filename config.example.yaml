@@ -17,6 +17,10 @@ ssh_key: ~/.ssh/ap_monitor
 listen_host: 0.0.0.0
 listen_port: 8088
 
+# Dashboard temperature unit: C (default) or F. Storage and MQTT always use
+# °C; Home Assistant converts to its own configured unit system regardless.
+# temp_unit: F
+
 # SSH host keys are pinned on first connect and changes are rejected (detects
 # AP impersonation). Pins are stored in a `known_hosts` file next to db_file;
 # override the location here if needed. After reflashing an AP, delete its

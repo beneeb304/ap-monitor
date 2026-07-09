@@ -1,6 +1,6 @@
 # Home Assistant add-on manifest for AP Monitor.
 name: AP Monitor
-version: "1.6.0"
+version: "1.6.1"
 slug: ap_monitor
 description: Live wifi client → access-point monitoring for OpenWrt / GL.iNet
 url: https://github.com/beneeb304/ap-monitor

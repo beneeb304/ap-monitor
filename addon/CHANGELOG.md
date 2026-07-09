@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+- New `temp_unit: F` config option shows dashboard temperatures in
+  Fahrenheit. Storage and MQTT stay °C (HA converts to its own unit
+  system automatically).
+
 ## 1.6.0
 
 - Health tab: temperature (hottest thermal zone) and per-band radio noise
