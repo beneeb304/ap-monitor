@@ -14,8 +14,12 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
-- **Roaming events feed**: detects when a device moves between APs, with optional desktop notifications
-- **Search**: filter by name, hostname, IP, MAC, vendor, or AP
+- **AP health metrics (Health tab)**: uptime, load, memory, temperature, per-band radio noise floor, and channel utilization per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
+- **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
+- **MQTT event topics**: new-device, roam, AP up/down, and reboot events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
+- **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
+- **Roaming events feed**: detects when a device moves between APs
+- **Search & AP filter**: filter by name, hostname, IP, MAC, vendor, or AP — or click an AP chip to see just its clients
 - **No agent on the routers** — pure SSH + `ubus`/`iwinfo`, which ship on OpenWrt
 - Self-contained: SQLite for history, Chart.js + an OUI vendor database vendored locally (works fully offline)
 
@@ -158,20 +162,35 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 | `db_file` | SQLite history path |
 | `retention_days` | How long history + roam events are kept |
 | `offline_threshold` | Consecutive failed polls before an AP is declared offline (default 3) |
+| `temp_unit` | Dashboard temperature display unit, `C` (default) or `F` — storage/MQTT stay °C |
+| `known_hosts_file` | Where pinned SSH host keys live (default: `known_hosts` next to `db_file`) |
 | `mqtt` | Optional block (`host`, `port`, `username`, `password`) — publishes AP status to MQTT with Home Assistant discovery; see [`addon/DOCS.md`](addon/DOCS.md) |
 | `dhcp_source` | Device whose `/tmp/dhcp.leases` resolves MAC → hostname/IP |
 | `devices[]` | List of `{ name, host }` for each AP/router |
 
+## Interpreting health metrics
+
+The Health tab (and the matching HA sensors) are diagnostic tools; here's what to expect and how to read them:
+
+- **Uptime** — a value lower than your last check means the AP rebooted silently; the poller also detects this (uptime going backwards) and emits an `ap_reboot` event. Repeated resets that never show as "offline" are the classic sign of a crashing/overheating AP recovering faster than the offline debounce.
+- **Load / memory** — OpenWrt APs idle near zero load; sustained load near or above 1.0, or memory climbing steadily over days without recovering (rather than oscillating), is the classic pre-crash signature. Absolute memory % varies by model — watch the *trend*, not the number.
+- **Temperature** — reads the hottest thermal zone via sysfs. Baselines differ per SoC (a GL.iNet Flint 2 idles high-50s °C; IPQ-based units usually run cooler). Compare an AP against *its own* baseline: a rising trend, especially correlating with time of day or with drops in the events feed, means check ventilation/placement. APs without thermal sensors show "—".
+- **Noise floor (dBm)** — the radio's background interference level; more negative is better (−100 is quiet, −85 is noisy). A *rising* noise floor points at a new non-wifi interference source (microwave, baby monitor, USB-3 gear near antennas).
+- **Channel busy %** — how much airtime the operating channel is occupied (by anyone, not just your APs). Computed as the delta of `iwinfo survey` counters between polls, so: the first value appears only after two polls (~10 s after startup), and **driver support varies** — a permanently empty band means the wifi driver doesn't report survey counters, not a fault. High busy % with a *normal* noise floor = too much legit wifi traffic (consider changing channels); high busy % *and* a rising noise floor = non-wifi interference.
+- **Flapping clients** — a device bouncing between APs every few minutes in the events feed usually means overlapping coverage; check whether the roams correlate with channel-busy spikes.
+
 ## Notes & caveats
 
-- **Desktop roaming notifications** require a *secure context*. They work at `http://localhost:8088` but browsers block the Notification API over a plain-HTTP LAN address (e.g. `http://10.0.0.50:8088`). The on-page roaming events feed works everywhere regardless; put the app behind HTTPS if you want pop-ups LAN-wide.
 - AP Monitor only **reads** from your devices (`ubus`/`iwinfo`/lease file). It does not change any router configuration.
 - The SSH key is sensitive — it grants root on your routers. It is git-ignored here; never commit it.
+- SSH host keys are **pinned on first connect** (stored in a `known_hosts` file next to the history DB). If you reflash an AP, delete its line from that file to re-pin; an unexpected `BadHostKeyException` you *didn't* cause deserves investigation.
+- For push notifications, use an HA automation on the MQTT event topics (see [`addon/DOCS.md`](addon/DOCS.md)); the on-page events feed shows the same history.
 
 ## API
 
 - `GET /api/clients` — current snapshot (devices + clients, incl. name & vendor)
 - `GET /api/history?hours=6` — bucketed per-AP client counts
+- `GET /api/health?hours=24` — per-AP health series (uptime, load, memory, temp, noise, channel busy)
 - `GET /api/events?limit=80` — recent roaming, new-device, and AP offline/online events
 - `GET /api/ap_status` — current debounced online/offline state per AP (with `since` timestamp)
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen

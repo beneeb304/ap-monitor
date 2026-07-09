@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.1
+
+- Health tab redesign: one chart per unit family (load / % / temperature /
+  noise) instead of dual-axis charts, so every line reads against its own
+  scale. Temperature and noise axes get padding so normal fluctuation no
+  longer renders as full-scale swings.
+- README: new "Interpreting health metrics" guide.
+
 ## 1.7.0
 
 - Radio channel utilization (busy %) per band, computed as the delta of

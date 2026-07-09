@@ -59,6 +59,9 @@
   .cell .k { color: #8a93a3; font-size: 11px; }
   .cell .v { font-size: 14px; margin-top: 2px; }
   .roam-row { padding: 5px 0; border-bottom: 1px solid #20262f; font-size: 13px; }
+  .hgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+  @media (max-width: 1200px) { .hgrid { grid-template-columns: 1fr; } }
+  .hgrid .htitle { margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a93a3; }
 </style>
 </head>
 <body>
@@ -227,17 +230,17 @@ async function refreshHealth(){
   healthCharts = {};
   wrap.innerHTML = h.aps.length ? "" :
     '<p class="muted">No health samples yet — they are collected every 30 seconds, so give it a minute after updating.</p>';
-  const axisOpts = (extra) => ({ticks:{color:'#8a93a3'},grid:{color:'#1c222b'},...extra});
-  const chartOpts = (yTitle, y2Title, y2Extra) => ({
+  // One chart per unit family, each with its own honest scale. `grace` pads
+  // the axis so small normal fluctuation doesn't render as full-scale swings.
+  const chartOpts = (legend, yExtra) => ({
     animation:false, responsive:true, interaction:{mode:'index',intersect:false},
-    scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:8},grid:{color:'#1c222b'}},
-             y: axisOpts({title:{display:true,text:yTitle,color:'#8a93a3'}}),
-             y2:{position:'right',ticks:{color:'#8a93a3'},grid:{drawOnChartArea:false},
-                 title:{display:true,text:y2Title,color:'#8a93a3'},...y2Extra} },
-    plugins:{ legend:{labels:{color:'#cdd5e0',boxWidth:12}} }
+    scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:6},grid:{color:'#1c222b'}},
+             y:{ticks:{color:'#8a93a3'},grid:{color:'#1c222b'},...yExtra} },
+    plugins:{ legend: legend ? {labels:{color:'#cdd5e0',boxWidth:12}} : {display:false} }
   });
-  const line = (label, data, color, axis) => ({ label, data, borderColor: color,
-    borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: axis, spanGaps: true });
+  const line = (label, data, color, fill) => ({ label, data, borderColor: color,
+    backgroundColor: color + "22", borderWidth: 2, pointRadius: 0, tension: .25,
+    spanGaps: true, fill: !!fill });
 
   const degF = h.temp_unit === "F";
   const cvt = c => c==null ? null : degF ? Math.round((c*9/5+32)*10)/10 : c;
@@ -259,34 +262,32 @@ async function refreshHealth(){
         <div class="cell"><div class="k">Noise 2.4/5 GHz</div><div class="v">${s.noise_24[last]!=null?s.noise_24[last]:'—'} / ${s.noise_5[last]!=null?s.noise_5[last]:'—'} dBm</div></div>
         <div class="cell"><div class="k">Busy 2.4/5 GHz</div><div class="v">${s.util_24[last]!=null?s.util_24[last]+'%':'—'} / ${s.util_5[last]!=null?s.util_5[last]+'%':'—'}</div></div>
       </div>
-      <canvas height="70"></canvas>
-      ${hasTemp||hasNoise ? '<canvas class="c2" height="70" style="margin-top:10px"></canvas>' : ''}`;
+      <div class="hgrid">
+        <div><div class="htitle">Load (1m)</div><canvas data-c="load" height="60"></canvas></div>
+        <div><div class="htitle">Memory &amp; channel busy (%)</div><canvas data-c="pct" height="60"></canvas></div>
+        ${hasTemp ? '<div><div class="htitle">Temperature ('+degLbl+')</div><canvas data-c="temp" height="60"></canvas></div>' : ''}
+        ${hasNoise ? '<div><div class="htitle">Noise floor (dBm)</div><canvas data-c="noise" height="60"></canvas></div>' : ''}
+      </div>`;
     wrap.appendChild(el);
     const labels = s.ts.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
-    const ds1 = [
-      Object.assign(line("Load (1m)", s.load1, COLORS[1], "y"), {backgroundColor: COLORS[1]+"22"}),
-      line("Mem used %", s.mem_used_pct, COLORS[3], "y2"),
-    ];
-    if(s.util_24.some(v=>v!=null)) ds1.push(line("Busy 2.4 GHz %", s.util_24, COLORS[2], "y2"));
-    if(s.util_5.some(v=>v!=null)) ds1.push(line("Busy 5 GHz %", s.util_5, COLORS[5], "y2"));
-    if(s.util_6.some(v=>v!=null)) ds1.push(line("Busy 6 GHz %", s.util_6, COLORS[6], "y2"));
-    healthCharts[ap+"_1"] = new Chart(el.querySelector("canvas"), {
-      type: "line",
-      data: { labels, datasets: ds1 },
-      options: chartOpts('load', '%', {min:0, max:100})
-    });
-    const c2 = el.querySelector(".c2");
-    if(c2){
-      const ds = [];
-      if(hasTemp) ds.push(line("Temp "+degLbl, s.temp, COLORS[6], "y"));
-      if(s.noise_24.some(v=>v!=null)) ds.push(line("Noise 2.4 GHz", s.noise_24, COLORS[0], "y2"));
-      if(s.noise_5.some(v=>v!=null)) ds.push(line("Noise 5 GHz", s.noise_5, COLORS[4], "y2"));
-      if(s.noise_6.some(v=>v!=null)) ds.push(line("Noise 6 GHz", s.noise_6, COLORS[5], "y2"));
-      healthCharts[ap+"_2"] = new Chart(c2, {
-        type: "line", data: { labels, datasets: ds },
-        options: chartOpts(degLbl, 'noise dBm', {})
-      });
-    }
+    const mk = (key, datasets, legend, yExtra) => {
+      const c = el.querySelector(`canvas[data-c="${key}"]`);
+      if(c) healthCharts[ap+"_"+key] = new Chart(c, {
+        type: "line", data: { labels, datasets }, options: chartOpts(legend, yExtra) });
+    };
+    mk("load", [line("Load (1m)", s.load1, COLORS[1], true)], false,
+       {beginAtZero:true, grace:'15%'});
+    const pct = [line("Mem used", s.mem_used_pct, COLORS[3])];
+    if(s.util_24.some(v=>v!=null)) pct.push(line("Busy 2.4 GHz", s.util_24, COLORS[2]));
+    if(s.util_5.some(v=>v!=null)) pct.push(line("Busy 5 GHz", s.util_5, COLORS[5]));
+    if(s.util_6.some(v=>v!=null)) pct.push(line("Busy 6 GHz", s.util_6, COLORS[6]));
+    mk("pct", pct, true, {min:0, max:100});
+    if(hasTemp) mk("temp", [line("Temp", s.temp, COLORS[6], true)], false, {grace:'40%'});
+    const noise = [];
+    if(s.noise_24.some(v=>v!=null)) noise.push(line("2.4 GHz", s.noise_24, COLORS[0]));
+    if(s.noise_5.some(v=>v!=null)) noise.push(line("5 GHz", s.noise_5, COLORS[4]));
+    if(s.noise_6.some(v=>v!=null)) noise.push(line("6 GHz", s.noise_6, COLORS[5]));
+    if(hasNoise) mk("noise", noise, true, {grace:'25%'});
   });
 }
 
