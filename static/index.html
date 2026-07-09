@@ -266,6 +266,7 @@ async function refreshHealth(){
         <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+degLbl:'—'}</div></div>
         <div class="cell"><div class="k">Noise 2.4/5 GHz</div><div class="v">${s.noise_24[last]!=null?s.noise_24[last]:'—'} / ${s.noise_5[last]!=null?s.noise_5[last]:'—'} dBm</div></div>
         <div class="cell"><div class="k">Busy 2.4/5 GHz</div><div class="v">${s.util_24[last]!=null?s.util_24[last]+'%':'—'} / ${s.util_5[last]!=null?s.util_5[last]+'%':'—'}</div></div>
+        <div class="cell"><div class="k">Overlay used</div><div class="v">${s.overlay_used_pct[last]!=null?s.overlay_used_pct[last]+'% ('+s.overlay_avail_mb[last]+' MB free)':'—'}</div></div>
       </div>
       <div class="hgrid">
         <div><div class="htitle">Load (1m)</div><canvas data-c="load" height="60"></canvas></div>
@@ -286,6 +287,7 @@ async function refreshHealth(){
     if(s.util_24.some(v=>v!=null)) pct.push(line("Busy 2.4 GHz", s.util_24, COLORS[2]));
     if(s.util_5.some(v=>v!=null)) pct.push(line("Busy 5 GHz", s.util_5, COLORS[5]));
     if(s.util_6.some(v=>v!=null)) pct.push(line("Busy 6 GHz", s.util_6, COLORS[6]));
+    if(s.overlay_used_pct.some(v=>v!=null)) pct.push(line("Overlay used", s.overlay_used_pct, COLORS[0]));
     mk("pct", pct, true, {min:0, max:100});
     if(hasTemp) mk("temp", [line("Temp", s.temp, COLORS[6], true)], false, {grace:'40%'});
     const noise = [];

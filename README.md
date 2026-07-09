@@ -14,7 +14,7 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
-- **AP health metrics (Health tab)**: uptime, load, memory, temperature, per-band radio noise floor, and channel utilization (opt-in, see caveat below) per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
+- **AP health metrics (Health tab)**: uptime, load, memory, overlay/flash usage, temperature, per-band radio noise floor, and channel utilization (opt-in, see caveat below) per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
 - **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
 - **MQTT event topics**: new-device, roam, AP up/down, reboot, and flapping events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
 - **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
@@ -176,6 +176,7 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 
 - **Uptime** — a value lower than your last check means the AP rebooted silently; the poller also detects this (uptime going backwards) and emits an `ap_reboot` event. Repeated resets that never show as "offline" are the classic sign of a crashing/overheating AP recovering faster than the offline debounce.
 - **Load / memory** — OpenWrt APs idle near zero load; sustained load near or above 1.0, or memory climbing steadily over days without recovering (rather than oscillating), is the classic pre-crash signature. Absolute memory % varies by model — watch the *trend*, not the number.
+- **Overlay used** — `/overlay` is the writable flash partition OpenWrt stores config, logs, and installed packages on; it's typically tiny (tens of MB). It fills *slowly* (over weeks/months from log growth or package installs), so watch the trend rather than any single reading — a full overlay causes hard-to-diagnose failures (config saves silently failing, package installs erroring) that look nothing like a disk-space problem. Shows "—" on rootfs layouts without a separate overlay partition.
 - **Temperature** — reads the hottest thermal zone via sysfs. Baselines differ per SoC (a GL.iNet Flint 2 idles high-50s °C; IPQ-based units usually run cooler). Compare an AP against *its own* baseline: a rising trend, especially correlating with time of day or with drops in the events feed, means check ventilation/placement. APs without thermal sensors show "—".
 - **Noise floor (dBm)** — the radio's background interference level; more negative is better (−100 is quiet, −85 is noisy). A *rising* noise floor points at a new non-wifi interference source (microwave, baby monitor, USB-3 gear near antennas).
 - **Channel busy %** — how much airtime the operating channel is occupied (by anyone, not just your APs). Computed as the delta of `iwinfo survey` counters between health samples (`sample_interval`, default 30s — not every poll). **Opt-in, off by default** (`channel_utilization: true`): on some MediaTek/mt76 firmware, the `iwinfo survey` command has been observed to crash the AP's `rpcd` process entirely, briefly taking down *all* client/signal monitoring for that AP until it self-recovers — not just this metric. Only enable it if you've confirmed your AP's driver handles the survey call reliably (Qualcomm/ath11k devices have tested fine); if enabling it causes periodic brief client-count dips, turn it back off. Once enabled and working: driver support still varies, so a permanently empty band just means that radio doesn't report survey counters. High busy % with a *normal* noise floor = too much legit wifi traffic (consider changing channels); high busy % *and* a rising noise floor = non-wifi interference.
@@ -193,7 +194,7 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 
 - `GET /api/clients` — current snapshot (devices + clients, incl. name & vendor)
 - `GET /api/history?hours=6` — bucketed per-AP client counts
-- `GET /api/health?hours=24` — per-AP health series (uptime, load, memory, temp, noise, channel busy)
+- `GET /api/health?hours=24` — per-AP health series (uptime, load, memory, overlay usage, temp, noise, channel busy)
 - `GET /api/events?limit=80` — recent roaming, new-device, flapping, and AP offline/online events
 - `GET /api/ap_status` — current debounced online/offline state per AP (with `since` timestamp)
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen

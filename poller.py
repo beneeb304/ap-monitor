@@ -40,6 +40,8 @@ printf '==MEMINFO==\n'
 grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo 2>/dev/null
 printf '==THERMAL==\n'
 cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
+printf '==OVERLAY==\n'
+df -k /overlay 2>/dev/null | tail -n +2
 """
 
 _SURVEY_CMD = (
@@ -179,7 +181,7 @@ def _parse_health(text):
     h, mem, temps, mode = {}, {}, [], None
     for line in text.split("==HEALTH==", 1)[1].splitlines():
         line = line.strip()
-        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO==", "==THERMAL=="):
+        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO==", "==THERMAL==", "==OVERLAY=="):
             mode = line.strip("=")
             continue
         if not line:
@@ -196,6 +198,14 @@ def _parse_health(text):
                 mem[k] = int(v.split()[0])
             elif mode == "THERMAL":
                 temps.append(int(line))
+            elif mode == "OVERLAY":
+                # `df -k` line: filesystem 1K-blocks used available use% mount.
+                # Index from the end since only the filesystem name (leading
+                # field) varies in width, never the trailing numeric columns.
+                parts = line.split()
+                if len(parts) >= 6:
+                    h["overlay_total_kb"] = int(parts[-5])
+                    h["overlay_avail_kb"] = int(parts[-3])
         except (ValueError, IndexError):
             continue
     if mem:

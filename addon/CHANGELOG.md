@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.0
+
+- Overlay/flash usage: `df /overlay` collected over the existing SSH
+  session (no new risk — a plain filesystem stat, unlike channel
+  utilization). Shown as a Health-tab tile ("used % + MB free") and a
+  chart line alongside memory/channel-busy, plus a new
+  `sensor.<ap>_overlay_used` HA sensor. A full overlay causes OpenWrt
+  failures (silent config-save errors, package install failures) that
+  look nothing like a disk-space problem, so it moves slowly and is a
+  watch-the-trend metric, not an alert-worthy one.
+
 ## 1.9.0
 
 - Roam-storm / flapping detection: a `flapping` event fires when a client

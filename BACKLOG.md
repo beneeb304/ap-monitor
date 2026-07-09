@@ -4,19 +4,19 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## P2 — reliability & health telemetry
 
-1. **Overlay/flash usage** — `df /overlay` per AP as a health metric + HA sensor. A full overlay (log growth, package cruft) causes weird OpenWrt failures nothing else explains; moves slowly so it's a spot-the-trend metric.
-2. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
+1. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
 
 ## P3 — security
 
-3. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
+2. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
 
 ## P4 — nice to have
 
-4. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
+3. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
 
 ## Done
 
+- **Overlay/flash usage** — `df /overlay` per AP as a Health-tab tile/chart line + HA sensor; unconditional (no crash risk, unlike channel utilization), moves slowly by design (v1.10.0, 2026-07).
 - **Roam-storm / flapping detection** — a `flapping` event (dashboard badge + `ap_monitor/events/flapping`) fires when a MAC roams `flapping_threshold`+ times within `flapping_window_minutes` (default 4/10min), one per episode. Verified against the exact `kingston` bouncing pattern observed live this session (v1.9.0, 2026-07).
 - **Detect rpcd/iwinfo down vs. genuinely zero clients** — an AP with zero radios enumerated (despite a successful SSH poll) now shows offline with a distinct, actionable error instead of a silent "0 clients" (v1.8.0, 2026-07).
 - **Radio channel utilization** — per-band busy % from survey counter deltas, Health tab + HA sensors (v1.7.0, 2026-07). Found in production to crash `rpcd` on MediaTek/mt76 firmware (verified on a GL.iNet Flint 2), taking down all iwinfo-derived monitoring for that AP; made opt-in and off by default in v1.7.2, with MQTT discovery for its sensors also gated in v1.7.3.

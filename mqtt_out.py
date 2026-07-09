@@ -94,6 +94,10 @@ class Publisher:
                                             "state_class": "measurement",
                                             "unit_of_measurement": "dBm",
                                             "entity_category": "diagnostic"}),
+                ("overlay_used_pct", "Overlay used", {"state_class": "measurement",
+                                                      "unit_of_measurement": "%",
+                                                      "icon": "mdi:harddisk",
+                                                      "entity_category": "diagnostic"}),
             ]
             if self._channel_utilization:
                 sensors += [
@@ -147,6 +151,10 @@ class Publisher:
                 if h.get("temp_c") is not None:
                     self._client.publish(f"{self._base}/{slug}/temp",
                                          str(h["temp_c"]), retain=True)
+                if h.get("overlay_total_kb") and h.get("overlay_avail_kb") is not None:
+                    pct = round((1 - h["overlay_avail_kb"] / h["overlay_total_kb"]) * 100, 1)
+                    self._client.publish(f"{self._base}/{slug}/overlay_used_pct",
+                                         str(pct), retain=True)
                 for band_key in ("noise_24", "noise_5", "util_24", "util_5"):
                     if h.get(band_key) is not None:
                         self._client.publish(f"{self._base}/{slug}/{band_key}",
