@@ -15,6 +15,7 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
 - **AP health metrics (Health tab)**: uptime, load, memory, overlay/flash usage, temperature, per-band radio noise floor, and channel utilization (opt-in, see caveat below) per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
+- **7-day uptime % & outage log**: per-AP uptime percentage and a list of recent outages (start time, duration, cause) reconstructed from the existing offline/online event history — no separate tracking needed
 - **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
 - **MQTT event topics**: new-device, roam, AP up/down, reboot, and flapping events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
 - **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
@@ -160,7 +161,7 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 | `ssh_key` | Path to the SSH **private** key |
 | `listen_host` / `listen_port` | Where the web app binds (default `0.0.0.0:8088`) |
 | `db_file` | SQLite history path |
-| `retention_days` | How long history + roam events are kept |
+| `retention_days` | How long history + roam events are kept; also bounds how far back the outage summary can see (default 7, matching its default 7-day window) |
 | `offline_threshold` | Consecutive failed polls before an AP is declared offline (default 3) |
 | `temp_unit` | Dashboard temperature display unit, `C` (default) or `F` — storage/MQTT stay °C |
 | `known_hosts_file` | Where pinned SSH host keys live (default: `known_hosts` next to `db_file`) |
@@ -175,6 +176,7 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 The Health tab (and the matching HA sensors) are diagnostic tools; here's what to expect and how to read them:
 
 - **Uptime** — a value lower than your last check means the AP rebooted silently; the poller also detects this (uptime going backwards) and emits an `ap_reboot` event. Repeated resets that never show as "offline" are the classic sign of a crashing/overheating AP recovering faster than the offline debounce.
+- **Uptime (7d) & outage log** — a rolling percentage and outage list reconstructed from the AP's own offline/online history, not a separate metric to configure. Reconstruction starts from your `retention_days` window, so a window longer than your retention setting silently gets truncated to whatever history still exists. A "0 outages, 100%" AP that you know had brief blips is a sign those blips were shorter than the polling/debounce resolution, not that they didn't happen.
 - **Load / memory** — OpenWrt APs idle near zero load; sustained load near or above 1.0, or memory climbing steadily over days without recovering (rather than oscillating), is the classic pre-crash signature. Absolute memory % varies by model — watch the *trend*, not the number.
 - **Overlay used** — `/overlay` is the writable flash partition OpenWrt stores config, logs, and installed packages on; it's typically tiny (tens of MB). It fills *slowly* (over weeks/months from log growth or package installs), so watch the trend rather than any single reading — a full overlay causes hard-to-diagnose failures (config saves silently failing, package installs erroring) that look nothing like a disk-space problem. Shows "—" on rootfs layouts without a separate overlay partition.
 - **Temperature** — reads the hottest thermal zone via sysfs. Baselines differ per SoC (a GL.iNet Flint 2 idles high-50s °C; IPQ-based units usually run cooler). Compare an AP against *its own* baseline: a rising trend, especially correlating with time of day or with drops in the events feed, means check ventilation/placement. APs without thermal sensors show "—".
@@ -197,5 +199,6 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 - `GET /api/health?hours=24` — per-AP health series (uptime, load, memory, overlay usage, temp, noise, channel busy)
 - `GET /api/events?limit=80` — recent roaming, new-device, flapping, and AP offline/online events
 - `GET /api/ap_status` — current debounced online/offline state per AP (with `since` timestamp)
+- `GET /api/outages?hours=168` — per-AP uptime % and outage list over the window, reconstructed from AP up/down events
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen
 - `POST /api/name` — set/clear a custom device name (JSON `{ "mac": "...", "name": "..." }`)

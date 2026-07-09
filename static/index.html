@@ -225,10 +225,23 @@ function fmtUptime(s){
   return d ? d+"d "+h+"h" : h ? h+"h "+m+"m" : m+"m";
 }
 
+function fmtDuration(s){
+  if(s==null) return "—";
+  if(s < 60) return Math.round(s)+"s";
+  if(s < 3600) return Math.floor(s/60)+"m "+Math.round(s%60)+"s";
+  if(s < 86400) return Math.floor(s/3600)+"h "+Math.floor((s%3600)/60)+"m";
+  return Math.floor(s/86400)+"d "+Math.floor((s%86400)/3600)+"h";
+}
+
 async function refreshHealth(){
   if(tab!=="health") return;
-  let h;
-  try { h = await (await fetch("/api/health?hours="+Math.max(24, windowHours))).json(); }
+  let h, outages;
+  try {
+    [h, outages] = await Promise.all([
+      (await fetch("/api/health?hours="+Math.max(24, windowHours))).json(),
+      (await fetch("/api/outages?hours=168")).json(),
+    ]);
+  }
   catch(e){ return; }
   const wrap = document.getElementById("view-health");
   Object.values(healthCharts).forEach(c => c.destroy());
@@ -253,6 +266,7 @@ async function refreshHealth(){
 
   h.aps.forEach(ap => {
     const s = h.series[ap], last = s.ts.length-1;
+    const o = outages[ap] || {uptime_pct:100, outage_count:0, longest_outage_s:0, outages:[]};
     s.temp = s.temp.map(cvt);
     const hasTemp = s.temp.some(v => v!=null);
     const hasNoise = s.noise_24.some(v => v!=null) || s.noise_5.some(v => v!=null);
@@ -260,7 +274,9 @@ async function refreshHealth(){
     el.className = "panel";
     el.innerHTML = `<h3>${esc(ap)}</h3>
       <div class="grid">
-        <div class="cell"><div class="k">Uptime</div><div class="v">${fmtUptime(s.uptime[last])}</div></div>
+        <div class="cell"><div class="k">Uptime (current)</div><div class="v">${fmtUptime(s.uptime[last])}</div></div>
+        <div class="cell"><div class="k">Uptime (7d)</div><div class="v">${o.uptime_pct}%</div></div>
+        <div class="cell"><div class="k">Outages (7d)</div><div class="v">${o.outage_count}${o.outage_count?' (longest '+fmtDuration(o.longest_outage_s)+')':''}</div></div>
         <div class="cell"><div class="k">Load (1m)</div><div class="v">${s.load1[last]!=null?s.load1[last]:'—'}</div></div>
         <div class="cell"><div class="k">Memory used</div><div class="v">${s.mem_used_pct[last]!=null?s.mem_used_pct[last]+'%':'—'}</div></div>
         <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+degLbl:'—'}</div></div>
@@ -273,7 +289,11 @@ async function refreshHealth(){
         <div><div class="htitle">Memory &amp; channel busy (%)</div><canvas data-c="pct" height="60"></canvas></div>
         ${hasTemp ? '<div><div class="htitle">Temperature ('+degLbl+')</div><canvas data-c="temp" height="60"></canvas></div>' : ''}
         ${hasNoise ? '<div><div class="htitle">Noise floor (dBm)</div><canvas data-c="noise" height="60"></canvas></div>' : ''}
-      </div>`;
+      </div>
+      ${o.outages.length ? `<h3 class="muted" style="margin-top:14px">Recent outages (7d)</h3>
+        <div>${o.outages.map(out =>
+          `<div class="roam-row"><span class="muted small">${when(out.start)}</span> &nbsp; ${fmtDuration(out.duration_s)}${out.error?' <span class="muted">'+esc(out.error)+'</span>':''}</div>`
+        ).join('')}</div>` : ''}`;
     wrap.appendChild(el);
     const labels = s.ts.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
     const mk = (key, datasets, legend, yExtra) => {

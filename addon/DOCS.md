@@ -98,7 +98,9 @@ action:
 ```
 
 The dashboard's events feed also logs every AP offline/online transition, and
-`GET /api/ap_status` exposes the current debounced state per AP.
+`GET /api/ap_status` exposes the current debounced state per AP. The **Health**
+tab shows a 7-day uptime % and recent-outages list per AP, reconstructed from
+this same event history — no separate tracking or config needed.
 
 ## Event topics
 

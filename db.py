@@ -273,6 +273,61 @@ def ap_status(path):
                 for r in conn.execute("SELECT ap, online, since, error FROM ap_status")}
 
 
+def outage_summary(path, hours=168):
+    """Per-AP uptime %% and outage list over the last `hours`, reconstructed
+    from ap_events transitions (no separate tracking needed).
+
+    Each ap_events row records a transition: at `ts`, the AP's state BECAME
+    `online`. So between consecutive rows the state is whatever the earlier
+    row set, and before the first row in the window the state is the
+    opposite of that row (it must have been that way for the row to be a
+    transition). After the last row, the state holds until now.
+    """
+    now = int(time.time())
+    start = now - int(hours * 3600)
+    with _connect(path) as conn:
+        aps = [r["ap"] for r in conn.execute(
+            "SELECT DISTINCT ap FROM ap_status "
+            "UNION SELECT DISTINCT ap FROM ap_events"
+        )]
+        current = {r["ap"]: bool(r["online"]) for r in
+                  conn.execute("SELECT ap, online FROM ap_status")}
+        result = {}
+        for ap in aps:
+            rows = conn.execute(
+                "SELECT ts, online, error FROM ap_events WHERE ap=? AND ts >= ? ORDER BY ts",
+                (ap, start),
+            ).fetchall()
+
+            segments = []  # (seg_start, seg_end, online, error)
+            if rows:
+                cur_start = start
+                cur_online = not bool(rows[0]["online"])
+                cur_error = None
+                for r in rows:
+                    segments.append((cur_start, r["ts"], cur_online, cur_error))
+                    cur_start, cur_online, cur_error = r["ts"], bool(r["online"]), r["error"]
+                segments.append((cur_start, now, cur_online, cur_error))
+            else:
+                # No transitions in the window: state was constant throughout.
+                segments.append((start, now, current.get(ap, True), None))
+
+            window_s = now - start
+            downtime_s = sum(e - s for s, e, online, _ in segments if not online)
+            outages = [
+                {"start": s, "end": e, "duration_s": e - s, "error": err or ""}
+                for s, e, online, err in segments if not online and e > s
+            ]
+            outages.sort(key=lambda o: o["start"], reverse=True)
+            result[ap] = {
+                "uptime_pct": round((1 - downtime_s / window_s) * 100, 2) if window_s else 100.0,
+                "outage_count": len(outages),
+                "longest_outage_s": max((o["duration_s"] for o in outages), default=0),
+                "outages": outages[:10],
+            }
+    return result
+
+
 def history(path, hours):
     """Bucketed per-AP counts for the last `hours`. Returns aligned series."""
     now = int(time.time())

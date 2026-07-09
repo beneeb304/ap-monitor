@@ -92,6 +92,12 @@ def api_ap_status():
     return jsonify(db.ap_status(DB_PATH))
 
 
+@app.route("/api/outages")
+def api_outages():
+    hours = float(request.args.get("hours", 168))
+    return jsonify(db.outage_summary(DB_PATH, hours))
+
+
 @app.route("/api/history")
 def api_history():
     hours = float(request.args.get("hours", 6))

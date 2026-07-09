@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.0
+
+- Uptime % / outage summary: the Health tab now shows a 7-day uptime
+  percentage and a list of recent outages (start time, duration, cause) per
+  AP, reconstructed entirely from the existing AP offline/online event
+  history — no new tracking, config, or sensors needed. New
+  `GET /api/outages?hours=168` endpoint.
+
 ## 1.10.0
 
 - Overlay/flash usage: `df /overlay` collected over the existing SSH
