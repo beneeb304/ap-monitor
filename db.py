@@ -41,7 +41,8 @@ def init(path):
             CREATE INDEX IF NOT EXISTS idx_flapping_mac_ts ON flapping_events(mac, ts);
 
             CREATE TABLE IF NOT EXISTS new_device_events (
-                ts INTEGER NOT NULL, mac TEXT NOT NULL, hostname TEXT, vendor TEXT
+                ts INTEGER NOT NULL, mac TEXT NOT NULL, hostname TEXT, vendor TEXT,
+                untrusted INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_new_ts ON new_device_events(ts);
 
@@ -94,10 +95,15 @@ def init(path):
                 conn.execute(f"ALTER TABLE ap_health ADD COLUMN {col} {typ}")
             except sqlite3.OperationalError:
                 pass  # column already exists
+        # Migrate new_device_events tables created before untrusted existed.
+        try:
+            conn.execute("ALTER TABLE new_device_events ADD COLUMN untrusted INTEGER")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
 
 def record(path, snap, retention_days, sample_interval,
-           flapping_threshold=4, flapping_window_minutes=10):
+           flapping_threshold=4, flapping_window_minutes=10, known_macs=None):
     """Persist one snapshot. Returns list of new events (roam + new-device)."""
     global _last_sample_ts
     ts = int(snap["updated"])
@@ -169,13 +175,23 @@ def record(path, snap, retention_days, sample_interval,
                 )
                 if seeded:
                     vend = c.get("vendor") or ""
+                    # Untrusted-device alarm: opt-in via known_macs (a
+                    # config-declared allowlist). A device can't be "named"
+                    # before it's ever been seen, so naming can't classify a
+                    # brand-new device at this exact moment — only a
+                    # pre-declared allowlist can. None/empty known_macs means
+                    # the feature is off entirely (no false alarms from an
+                    # incomplete list).
+                    untrusted = bool(known_macs) and mac not in known_macs
                     conn.execute(
-                        "INSERT INTO new_device_events (ts,mac,hostname,vendor) VALUES (?,?,?,?)",
-                        (ts, mac, c.get("hostname") or "", vend),
+                        "INSERT INTO new_device_events (ts,mac,hostname,vendor,untrusted) "
+                        "VALUES (?,?,?,?,?)",
+                        (ts, mac, c.get("hostname") or "", vend, int(untrusted)),
                     )
                     new_events.append({"ts": ts, "kind": "new", "mac": mac,
                                        "hostname": c.get("hostname") or "", "vendor": vend,
-                                       "randomized": vendor.is_randomized(mac)})
+                                       "randomized": vendor.is_randomized(mac),
+                                       "untrusted": untrusted})
             else:
                 conn.execute("UPDATE seen_devices SET last_seen=? WHERE mac=?", (ts, mac))
 
@@ -402,8 +418,8 @@ def events(path, limit=100):
             "SELECT ts, 'roam' AS kind, mac, hostname, from_ap, to_ap, band, "
             "NULL AS vendor, NULL AS ap, NULL AS error FROM roam_events "
             "UNION ALL "
-            "SELECT ts, 'new' AS kind, mac, hostname, NULL, NULL, NULL, vendor, "
-            "NULL, NULL FROM new_device_events "
+            "SELECT ts, CASE untrusted WHEN 1 THEN 'new_untrusted' ELSE 'new' END AS kind, "
+            "mac, hostname, NULL, NULL, NULL, vendor, NULL, NULL FROM new_device_events "
             "UNION ALL "
             "SELECT ts, CASE online WHEN 1 THEN 'ap_online' ELSE 'ap_offline' END, "
             "NULL, NULL, NULL, NULL, NULL, NULL, ap, error FROM ap_events "

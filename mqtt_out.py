@@ -163,13 +163,22 @@ class Publisher:
     def publish_events(self, events):
         """Publish each event as JSON to a per-kind topic:
         ap_monitor/events/new, .../new_random (locally-administered MACs,
-        i.e. phone MAC rotation — usually not alert-worthy), .../roam,
-        .../ap_online, .../ap_offline. Not retained: events are moments,
-        and a retained "new device" would re-fire automations on HA restart.
+        i.e. phone MAC rotation — usually not alert-worthy), .../new_untrusted
+        (opt-in, see known_macs), .../roam, .../ap_online, .../ap_offline.
+        Not retained: events are moments, and a retained "new device" would
+        re-fire automations on HA restart.
+
+        Precedence for "new" events: untrusted wins over randomized. A device
+        that's both unrecognized *and* using a rotated MAC is exactly the
+        case the security-alarm topic exists for — it must not get silently
+        routed into the noise-reduction bucket meant for routine phone MAC
+        rotation.
         """
         for ev in events:
             kind = ev.get("kind", "unknown")
-            if kind == "new" and ev.get("randomized"):
+            if kind == "new" and ev.get("untrusted"):
+                kind = "new_untrusted"
+            elif kind == "new" and ev.get("randomized"):
                 kind = "new_random"
             self._client.publish(f"{self._base}/events/{kind}", json.dumps(ev))
 

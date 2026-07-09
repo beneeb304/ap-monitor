@@ -38,6 +38,10 @@ CHANNEL_UTILIZATION = bool(CFG.get("channel_utilization", False))
 # overlap or a sick radio, distinct from normal roaming.
 FLAPPING_THRESHOLD = CFG.get("flapping_threshold", 4)
 FLAPPING_WINDOW_MINUTES = CFG.get("flapping_window_minutes", 10)
+# Unknown-device alarm: opt-in allowlist. Empty/unset disables the feature
+# entirely (no new_untrusted events at all) rather than treating every new
+# device as untrusted by default.
+KNOWN_MACS = {m.strip().lower() for m in CFG.get("known_macs", []) if m and m.strip()} or None
 
 app = Flask(__name__, static_folder=None)
 
@@ -63,7 +67,7 @@ def poll_loop():
                 fail_counts[d["name"]] = fails
                 d["online"] = fails < OFFLINE_THRESHOLD
             events = db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL,
-                              FLAPPING_THRESHOLD, FLAPPING_WINDOW_MINUTES)
+                              FLAPPING_THRESHOLD, FLAPPING_WINDOW_MINUTES, KNOWN_MACS)
             events += db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
             if mqtt_pub:
                 mqtt_pub.publish(snap["devices"])

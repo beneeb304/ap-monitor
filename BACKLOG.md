@@ -2,16 +2,13 @@
 
 Sorted by value-per-effort for the current goals: AP reliability/alerting first, then network health, then security hardening.
 
-## P3 — security
-
-1. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
-
 ## P4 — nice to have
 
-2. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
+1. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
 
 ## Done
 
+- **Unknown-device alarm mode** — opt-in `known_macs` allowlist; a new device not on it fires a distinct `new_untrusted` event (red dashboard badge + MQTT topic), on top of the routine `new` event. Takes priority over `new_random` routing. Off by default — no behavior change unless configured (v1.12.0, 2026-07).
 - **Uptime % / outage summary panel** — 7-day uptime % + recent-outages list per AP on the Health tab, reconstructed purely from existing `ap_events` (no new tracking); new `GET /api/outages` endpoint (v1.11.0, 2026-07).
 - **Overlay/flash usage** — `df /overlay` per AP as a Health-tab tile/chart line + HA sensor; unconditional (no crash risk, unlike channel utilization), moves slowly by design (v1.10.0, 2026-07).
 - **Roam-storm / flapping detection** — a `flapping` event (dashboard badge + `ap_monitor/events/flapping`) fires when a MAC roams `flapping_threshold`+ times within `flapping_window_minutes` (default 4/10min), one per episode. Verified against the exact `kingston` bouncing pattern observed live this session (v1.9.0, 2026-07).

@@ -11,13 +11,14 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **Custom device names**: label any MAC with a friendly name that persists
 - **Vendor lookup**: offline MAC → manufacturer resolution, and detection of randomized/private MACs
 - **New-device detection**: alerts the first time a never-before-seen MAC joins
+- **Unknown-device alarm mode** (opt-in): declare a `known_macs` allowlist and any new device NOT on it fires a louder, distinct `new_untrusted` event alongside the routine one
 - **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
 - **AP health metrics (Health tab)**: uptime, load, memory, overlay/flash usage, temperature, per-band radio noise floor, and channel utilization (opt-in, see caveat below) per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
 - **7-day uptime % & outage log**: per-AP uptime percentage and a list of recent outages (start time, duration, cause) reconstructed from the existing offline/online event history — no separate tracking needed
 - **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
-- **MQTT event topics**: new-device, roam, AP up/down, reboot, and flapping events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
+- **MQTT event topics**: new-device, unknown-device, roam, AP up/down, reboot, and flapping events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
 - **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
 - **Roaming events feed & flapping detection**: logs every AP-to-AP move, and flags a client roaming repeatedly within a short window as a distinct `flapping` event — a sign of channel overlap or a sick radio, not normal movement
 - **Search & AP filter**: filter by name, hostname, IP, MAC, vendor, or AP — or click an AP chip to see just its clients
@@ -167,6 +168,7 @@ microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 | `known_hosts_file` | Where pinned SSH host keys live (default: `known_hosts` next to `db_file`) |
 | `channel_utilization` | Opt-in, default `false` — see [Interpreting health metrics](#interpreting-health-metrics) for the MediaTek/mt76 rpcd-crash caveat before enabling |
 | `flapping_threshold` / `flapping_window_minutes` | Roam-storm detection: emit one `flapping` event per episode when a MAC roams this many times within this rolling window (default 4 roams / 10 min) |
+| `known_macs` | Opt-in, default unset — list of MACs to treat as recognized; anything else triggers a distinct `new_untrusted` event. See Notes & caveats below before enabling |
 | `mqtt` | Optional block (`host`, `port`, `username`, `password`) — publishes AP status to MQTT with Home Assistant discovery; see [`addon/DOCS.md`](addon/DOCS.md) |
 | `dhcp_source` | Device whose `/tmp/dhcp.leases` resolves MAC → hostname/IP |
 | `devices[]` | List of `{ name, host }` for each AP/router |
@@ -191,6 +193,7 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 - SSH host keys are **pinned on first connect** (stored in a `known_hosts` file next to the history DB). If you reflash an AP, delete its line from that file to re-pin; an unexpected `BadHostKeyException` you *didn't* cause deserves investigation.
 - For push notifications, use an HA automation on the MQTT event topics (see [`addon/DOCS.md`](addon/DOCS.md)); the on-page events feed shows the same history.
 - If an AP shows offline with the error **"iwinfo unreachable (rpcd likely crashed)"**, the AP itself is up (SSH and health metrics still work) but its `rpcd` process — which serves all wifi client/signal data — has died. SSH in and run `/etc/init.d/rpcd restart`; it typically recovers in seconds with no wifi disruption. `procd` usually respawns `rpcd` on its own within moments, so this is normally self-healing, but persistent recurrence on the same AP is worth investigating (see the channel-utilization caveat above for one known trigger).
+- **`known_macs` (unknown-device alarm) is opt-in and off by default.** A device can't be named before it's ever been seen, so only a list declared *in advance* can classify a brand-new device as unrecognized the moment it appears — naming a device after the fact (the existing custom-name feature) can't retroactively do this. Leave it unset and behavior is unchanged; populate it with every MAC you expect and a genuinely new device gets a distinct `new_untrusted` event (red badge in the feed, `ap_monitor/events/new_untrusted` in MQTT) in addition to the routine informational one. An incomplete list will flag your own un-added devices, so update it as you add gear, or treat the first wave of alerts as a checklist for filling it in.
 
 ## API
 

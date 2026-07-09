@@ -57,6 +57,20 @@ offline_threshold: 3
 flapping_threshold: 4
 flapping_window_minutes: 10
 
+# Unknown-device alarm mode: opt-in, off by default. A device can't be
+# "named" before it's ever been seen, so only a list you declare in advance
+# can flag a brand-new device as unrecognized at the moment it appears.
+# List every MAC you expect (copy from the dashboard's MAC column, or
+# /api/clients) — anything NOT on this list additionally fires a distinct
+# `new_untrusted` event (dashboard: red "UNTRUSTED" badge; MQTT:
+# ap_monitor/events/new_untrusted), on top of the routine informational
+# `new` event that still fires for every device either way. Leave unset/
+# empty to disable entirely — an incomplete list would otherwise flag your
+# own un-added devices as "untrusted".
+# known_macs:
+#   - aa:bb:cc:dd:ee:01
+#   - aa:bb:cc:dd:ee:02
+
 # Optional: publish AP status to an MQTT broker with Home Assistant discovery.
 # Each AP shows up in HA as a connectivity binary_sensor + client-count sensor,
 # so a phone notification when an AP drops is a one-line HA automation.

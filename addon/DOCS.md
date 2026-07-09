@@ -41,6 +41,8 @@ temp_unit: F                             # dashboard temp display: C (default) o
 channel_utilization: false               # opt-in; see caveat below before enabling
 flapping_threshold: 4                    # roams within the window that trigger a flapping event
 flapping_window_minutes: 10              # rolling window for flapping_threshold
+# known_macs:                            # opt-in unknown-device alarm; see caveat below
+#   - aa:bb:cc:dd:ee:01
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router
@@ -66,6 +68,12 @@ mqtt:
 > driver handles `ubus call iwinfo survey` reliably (tested fine on
 > Qualcomm/ath11k devices); if you enable it and see periodic brief
 > client-count dips afterward, turn it back off.
+
+> **Unknown-device alarm mode (`known_macs`) is opt-in, off by default.**
+> List every MAC you expect to see; a device NOT on that list additionally
+> fires a `new_untrusted` event alongside the routine `new` one. Leave it
+> empty and nothing changes from today's behavior — an incomplete list
+> would otherwise flag your own devices as "untrusted".
 
 ## AP offline alerts in Home Assistant
 
@@ -109,6 +117,11 @@ Every event is also published as JSON to a per-kind MQTT topic (not retained):
 - `ap_monitor/events/new` — never-before-seen device with a real (vendor) MAC
 - `ap_monitor/events/new_random` — new locally-administered MAC (phone MAC
   rotation; usually not alert-worthy — kept separate to avoid alert noise)
+- `ap_monitor/events/new_untrusted` — new device NOT on your `known_macs`
+  list (opt-in; see caveat above). Takes priority over `new_random` — a
+  device that's both unrecognized *and* using a rotated MAC is exactly what
+  this topic is for, so it won't get silently absorbed into the noise-
+  reduction bucket meant for routine phone MAC rotation.
 - `ap_monitor/events/roam` — client moved between APs
 - `ap_monitor/events/ap_offline` / `ap_monitor/events/ap_online`
 - `ap_monitor/events/ap_reboot` — an AP's uptime went backwards (silent reboot)
@@ -130,6 +143,23 @@ action:
       message: >-
         {{ trigger.payload_json.hostname or trigger.payload_json.mac }}
         ({{ trigger.payload_json.vendor }})
+```
+
+Example — louder alert for a genuinely unrecognized device (requires
+`known_macs` populated):
+
+```yaml
+alias: Unknown device on wifi
+trigger:
+  - platform: mqtt
+    topic: ap_monitor/events/new_untrusted
+action:
+  - service: notify.notify
+    data:
+      title: "⚠️ Unrecognized device joined wifi"
+      message: >-
+        {{ trigger.payload_json.mac }} ({{ trigger.payload_json.vendor }})
+        is not on the known-devices list.
 ```
 
 `db_file` must stay under `/data` so history survives add-on restarts/updates.

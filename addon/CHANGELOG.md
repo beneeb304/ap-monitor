@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.12.0
+
+- Unknown-device alarm mode: opt-in `known_macs` allowlist (off by
+  default). A new device NOT on the list fires a distinct
+  `new_untrusted` event — red "UNTRUSTED" badge in the dashboard,
+  `ap_monitor/events/new_untrusted` in MQTT — alongside the routine
+  informational `new` event, which is unaffected. Takes priority over
+  the `new_random` noise-reduction routing, since an unrecognized
+  device with a rotated MAC is exactly what this alarm is for.
+
 ## 1.11.0
 
 - Uptime % / outage summary: the Health tab now shows a 7-day uptime
