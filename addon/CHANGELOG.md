@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.2 — important fix, please update
+
+**Channel utilization (added in 1.7.0) is now opt-in and OFF by default.**
+On some MediaTek/mt76 firmware, the `ubus call iwinfo survey` command it
+relies on has been found to crash the AP's `rpcd` process entirely
+(reproduced reliably on a GL.iNet Flint 2) — taking down *all* client and
+signal monitoring for that AP, not just the utilization metric, until
+`procd` respawns rpcd a few seconds later. If you were seeing intermittent
+gaps in client data or missing per-band metrics since 1.7.0, this was
+almost certainly why.
+
+If you want channel utilization back, set `channel_utilization: true` in
+config.yaml — but only if you've confirmed your AP's driver handles
+`ubus call iwinfo survey` reliably (Qualcomm/ath11k devices have tested
+fine). When enabled, it's also now Master-mode-only, wrapped in a 2-second
+remote timeout, and only queried once per `sample_interval` (default 30s)
+instead of every poll — all mitigations to shrink the blast radius, though
+they do not eliminate the underlying firmware crash on affected hardware.
+
 ## 1.7.1
 
 - Health tab redesign: one chart per unit family (load / % / temperature /

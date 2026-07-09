@@ -21,6 +21,16 @@ listen_port: 8088
 # °C; Home Assistant converts to its own configured unit system regardless.
 # temp_unit: F
 
+# Channel utilization (busy %) is opt-in and OFF by default. On some
+# MediaTek/mt76 firmware, the `ubus call iwinfo survey` command it relies on
+# has been observed to crash the AP's rpcd process entirely (verified on a
+# GL.iNet Flint 2) — taking down that AP's client/signal monitoring for a
+# poll cycle until it self-recovers. Only enable this if you've confirmed
+# your AP's driver handles `ubus call iwinfo survey` reliably (Qualcomm/
+# ath11k devices have tested fine); watch for periodic client-count dips
+# after enabling it. See README "Interpreting health metrics".
+# channel_utilization: true
+
 # SSH host keys are pinned on first connect and changes are rejected (detects
 # AP impersonation). Pins are stored in a `known_hosts` file next to db_file;
 # override the location here if needed. After reflashing an AP, delete its

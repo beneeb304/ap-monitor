@@ -11,14 +11,25 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Remote shell run on each AP. Uses ubus + jsonfilter (both stock on OpenWrt).
 # Emits marker-delimited JSON blocks so the result is easy to parse.
-REMOTE_CMD = r"""
+#
+# `ubus call iwinfo survey` is included only when __SURVEY__ is substituted in
+# (see poll_device): on some MediaTek/mt76 firmware it has been observed to
+# hang and crash the rpcd process serving iwinfo entirely (verified on a
+# GL.iNet Flint 2), taking down client/signal monitoring for every radio until
+# procd respawns rpcd. To bound the blast radius: it's only issued for
+# Master-mode (AP) interfaces, never client/backhaul links; it's wrapped in
+# `ubus -t 2` so a hang is capped at 2s instead of indefinite; and callers
+# only request it once per health-sample interval (see app.py), not every
+# poll, since that's the only cadence the data is actually stored at.
+_REMOTE_CMD_TEMPLATE = r"""
 for dev in $(ubus call iwinfo devices 2>/dev/null | jsonfilter -e '@.devices[*]'); do
   printf '==DEV %s==\n' "$dev"
-  ubus call iwinfo info "{\"device\":\"$dev\"}" 2>/dev/null
-  printf '\n==ASSOC==\n'
+  info=$(ubus call iwinfo info "{\"device\":\"$dev\"}" 2>/dev/null)
+  printf '%s\n' "$info"
+  printf '==ASSOC==\n'
   ubus call iwinfo assoclist "{\"device\":\"$dev\"}" 2>/dev/null
   printf '\n==SURVEY==\n'
-  ubus call iwinfo survey "{\"device\":\"$dev\"}" 2>/dev/null
+__SURVEY__
   printf '\n==END==\n'
 done
 printf '==HEALTH==\n==UPTIME==\n'
@@ -30,6 +41,15 @@ grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo 2>/dev/null
 printf '==THERMAL==\n'
 cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
 """
+
+_SURVEY_CMD = (
+    '  mode=$(printf \'%s\' "$info" | jsonfilter -e \'@.mode\' 2>/dev/null)\n'
+    '  if [ "$mode" = "Master" ]; then '
+    'ubus -t 2 call iwinfo survey "{\\"device\\":\\"$dev\\"}" 2>/dev/null; fi'
+)
+
+REMOTE_CMD = _REMOTE_CMD_TEMPLATE.replace("__SURVEY__", _SURVEY_CMD)
+REMOTE_CMD_NO_SURVEY = _REMOTE_CMD_TEMPLATE.replace("__SURVEY__", "  :")
 
 LEASES_CMD = "cat /tmp/dhcp.leases 2>/dev/null"
 
@@ -198,10 +218,16 @@ def parse_leases(text):
     return leases
 
 
-def poll_device(device, cfg):
-    """Return (clients_list, health_dict_or_None, error_str_or_None) for one AP."""
+def poll_device(device, cfg, include_survey=True):
+    """Return (clients_list, health_dict_or_None, error_str_or_None) for one AP.
+
+    `include_survey` gates the channel-utilization query (see REMOTE_CMD's
+    comment) — callers should only set it True once per health-sample
+    interval, not every poll, to minimize exposure to the rpcd crash risk.
+    """
+    cmd = REMOTE_CMD if include_survey else REMOTE_CMD_NO_SURVEY
     try:
-        out, _ = _ssh_run(device["host"], cfg, REMOTE_CMD)
+        out, _ = _ssh_run(device["host"], cfg, cmd)
     except Exception as e:  # noqa: BLE001 - report any SSH/connection failure
         return [], None, f"{type(e).__name__}: {e}"
 
@@ -275,7 +301,7 @@ def _activity_key(c):
     return (inactive, -signal)
 
 
-def poll_all(cfg):
+def poll_all(cfg, include_survey=True):
     """Poll every device, merge with DHCP leases, return a snapshot dict."""
     leases = {}
     try:
@@ -287,7 +313,7 @@ def poll_all(cfg):
     raw_clients = []
     device_status = []
     for device in cfg["devices"]:
-        clients, health, err = poll_device(device, cfg)
+        clients, health, err = poll_device(device, cfg, include_survey)
         device_status.append({
             "name": device["name"],
             "host": device["host"],

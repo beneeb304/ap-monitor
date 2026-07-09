@@ -17,3 +17,6 @@ __pycache__/
 ap_monitor
 ap_monitor.pub
 *.pem
+
+# Pinned SSH host keys (per-network, created next to db_file at runtime)
+/known_hosts

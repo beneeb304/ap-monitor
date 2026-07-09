@@ -28,6 +28,12 @@ SAMPLE_INTERVAL = CFG.get("sample_interval", 30)
 # Consecutive failed polls before an AP counts as offline. One SSH timeout is
 # usually a hiccup, not an outage; debouncing avoids false alerts.
 OFFLINE_THRESHOLD = CFG.get("offline_threshold", 3)
+# Channel-utilization polling is opt-in: on some MediaTek/mt76 firmware,
+# `ubus call iwinfo survey` has been observed to crash the rpcd process
+# serving iwinfo entirely (verified on a GL.iNet Flint 2) — every radio, not
+# just the one queried — taking down client/signal monitoring for a poll
+# cycle until procd respawns it. See README "Interpreting health metrics".
+CHANNEL_UTILIZATION = bool(CFG.get("channel_utilization", False))
 
 app = Flask(__name__, static_folder=None)
 
@@ -39,9 +45,14 @@ def poll_loop():
     db.init(DB_PATH)
     mqtt_pub = mqtt_out.setup(CFG)
     fail_counts = {}
+    next_survey_ts = 0  # gates channel-utilization polling; see poller.REMOTE_CMD
     while True:
         try:
-            snap = poller.poll_all(CFG)
+            now = time.time()
+            include_survey = CHANNEL_UTILIZATION and now >= next_survey_ts
+            if include_survey:
+                next_survey_ts = now + SAMPLE_INTERVAL
+            snap = poller.poll_all(CFG, include_survey)
             # Debounce the online flag; the raw error stays visible immediately.
             for d in snap["devices"]:
                 fails = 0 if d["online"] else fail_counts.get(d["name"], 0) + 1

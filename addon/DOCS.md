@@ -38,6 +38,7 @@ retention_days: 7
 sample_interval: 30
 offline_threshold: 3                     # failed polls before an AP counts as offline
 temp_unit: F                             # dashboard temp display: C (default) or F
+channel_utilization: false               # opt-in; see caveat below before enabling
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router
@@ -53,6 +54,16 @@ mqtt:
   username: <mqtt-user>
   password: <mqtt-pass>
 ```
+
+> **Channel utilization is opt-in, off by default.** On some MediaTek/mt76
+> firmware, the underlying `ubus call iwinfo survey` command has been
+> observed to crash the AP's `rpcd` process entirely (verified on a
+> GL.iNet Flint 2) — briefly taking down *all* client/signal monitoring
+> for that AP until `procd` respawns it, not just the utilization metric.
+> Only set `channel_utilization: true` if you've confirmed your AP's
+> driver handles `ubus call iwinfo survey` reliably (tested fine on
+> Qualcomm/ath11k devices); if you enable it and see periodic brief
+> client-count dips afterward, turn it back off.
 
 ## AP offline alerts in Home Assistant
 
