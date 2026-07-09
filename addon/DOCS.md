@@ -23,6 +23,19 @@ ssh-copy-id -i ap_monitor.pub root@<each-device-ip>
 3. Install and start this add-on. Open the dashboard from the **Open Web UI**
    button, or at `http://<home-assistant-ip>:8088`.
 
+## Accessing the dashboard on mobile (iOS especially)
+
+The add-on supports both direct access (`http://<home-assistant-ip>:8088`) and
+HA's **Ingress** proxy — use whichever **Open Web UI** button shows in
+**Settings → Add-ons → AP Monitor**. Ingress tunnels the dashboard through
+Home Assistant's own connection instead of resolving a separate hostname,
+which matters because the direct URL's `[HOST]` is often HA's `.local` mDNS
+hostname — and iOS's mDNS resolution in the Home Assistant app's embedded
+browser is known to be flaky (works fine on macOS, intermittently fails on
+iPhone/iPad even on the same wifi network). If "Open Web UI" fails to load
+on an iPhone but works fine on a Mac, this is almost always why — Ingress
+sidesteps it entirely since it never needs to resolve that hostname.
+
 ## `share/ap-monitor/config.yaml`
 
 ```yaml

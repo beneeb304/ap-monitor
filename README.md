@@ -153,6 +153,13 @@ builds it, auto-starts it, and adds an *Open Web UI* button.
 Full details are in [`addon/DOCS.md`](addon/DOCS.md). The Pico W and other
 microcontrollers can't run this (no Linux/Python) — use a Pi, NAS, or similar.
 
+The add-on supports HA's **Ingress** proxy in addition to direct port access —
+use the **Open Web UI** button in Settings → Add-ons rather than a bookmarked
+`http://<ip>:8088` URL if the dashboard fails to load on a phone (this is a
+known iOS issue: mDNS `.local` hostname resolution in the HA app's embedded
+browser is flaky; Ingress tunnels through HA's existing connection instead of
+resolving a separate hostname, sidestepping it).
+
 ## Configuration reference
 
 | Key | Description |

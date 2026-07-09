@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.13.0
+
+- Added Home Assistant **Ingress** support alongside the existing direct
+  port access. Fixes "Open Web UI" failing to load on iPhone/iPad even on
+  the same wifi network: the direct URL's host is often HA's `.local` mDNS
+  hostname, and iOS's mDNS resolution in the HA app's embedded browser is
+  known to be flaky. Ingress tunnels through HA's own already-working
+  connection instead, sidestepping that resolution entirely. No app code
+  changes needed — the dashboard already used only root-relative URLs.
+
 ## 1.12.0
 
 - Unknown-device alarm mode: opt-in `known_macs` allowlist (off by

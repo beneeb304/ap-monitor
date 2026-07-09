@@ -6,6 +6,7 @@ No open items — everything below has shipped or been deliberately dropped.
 
 ## Done
 
+- **HA Ingress support** — fixes "Open Web UI" failing on iPhone/iPad on the same wifi network (iOS mDNS resolution of the add-on's `.local` direct-access hostname is flaky in the HA app's embedded browser); Ingress tunnels through HA's own connection instead. Kept alongside the existing direct-port access, no app code changes needed (v1.13.0, 2026-07).
 - ~~Persist dashboard AP filter in URL hash~~ — dropped: not actually needed.
 - **Unknown-device alarm mode** — opt-in `known_macs` allowlist; a new device not on it fires a distinct `new_untrusted` event (red dashboard badge + MQTT topic), on top of the routine `new` event. Takes priority over `new_random` routing. Off by default — no behavior change unless configured (v1.12.0, 2026-07).
 - **Uptime % / outage summary panel** — 7-day uptime % + recent-outages list per AP on the Health tab, reconstructed purely from existing `ap_events` (no new tracking); new `GET /api/outages` endpoint (v1.11.0, 2026-07).

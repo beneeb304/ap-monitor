@@ -1,6 +1,6 @@
 # Home Assistant add-on manifest for AP Monitor.
 name: AP Monitor
-version: "1.12.0"
+version: "1.13.0"
 slug: ap_monitor
 description: Live wifi client → access-point monitoring for OpenWrt / GL.iNet
 url: https://github.com/beneeb304/ap-monitor
@@ -12,12 +12,19 @@ arch:
 init: false
 startup: application
 boot: auto
-# Web dashboard reachable at http://<home-assistant-ip>:8088
+# Web dashboard reachable directly at http://<home-assistant-ip>:8088, and via
+# HA's Ingress proxy (Settings > Add-ons > AP Monitor > Open Web UI). Ingress
+# tunnels through HA's own connection instead of resolving a separate
+# hostname, which fixes access from the HA mobile app on networks where the
+# add-on's direct host (often a .local mDNS name) doesn't resolve reliably —
+# notably iOS, where mDNS resolution in the app's embedded browser is flaky.
 ports:
   8088/tcp: 8088
 ports_description:
   8088/tcp: AP Monitor web dashboard
 webui: "http://[HOST]:[PORT:8088]"
+ingress: true
+ingress_port: 8088
 # /share holds your config.yaml + SSH key; /data persists the history DB.
 map:
   - share:rw
