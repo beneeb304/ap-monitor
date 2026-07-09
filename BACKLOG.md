@@ -19,6 +19,7 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## Done
 
+- **Temperature + noise floor** — hottest thermal zone and per-band radio noise, Health tab chart + HA sensors (v1.6.0, 2026-07).
 - **AP health metrics + Health tab** — uptime/load/memory over SSH, HA sensors via discovery, dashboard Health tab with history charts, silent-reboot events (v1.5.0, 2026-07).
 - **SSH host-key pinning** — trust-on-first-use pinning in the poller; changed keys reject the connection (v1.4.0, 2026-07).
 - **Publish events to MQTT** — new-device/roam/AP up-down events published to `ap_monitor/events/<kind>` (v1.3.0, 2026-07).
