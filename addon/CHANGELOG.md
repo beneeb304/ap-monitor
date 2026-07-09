@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.13.1 — follow-up fix for 1.13.0's Ingress support
+
+1.13.0 enabled Ingress but the dashboard itself wasn't actually ready for
+it: every `fetch()` call and the Chart.js `<script src>` used a **leading
+slash** (`/api/clients`, `/static/chart.umd.min.js`). A leading slash
+always resolves against the domain root — fine for direct port access,
+but under Ingress the add-on is served at a path prefix
+(`/api/hassio_ingress/<token>/...`), so those requests escaped the prefix
+entirely and hit Home Assistant's own core server instead, which has no
+such routes. Symptom: the dashboard shell loads (title, tabs, layout) but
+every panel stays empty with a "fetch error."
+
+Fixed by adding `<base href="./">` and switching every reference to a
+plain relative path (no leading slash), so requests resolve against
+whatever path the page was actually loaded from — correct under direct
+access, Ingress, or any other reverse-proxy prefix. Verified by mounting
+the real Flask app under a simulated Ingress path prefix (via Werkzeug's
+`DispatcherMiddleware`, which strips the prefix before forwarding exactly
+like Supervisor's proxy does) and confirming every request stayed within
+the prefix and the dashboard rendered with live data instead of "fetch
+error."
+
 ## 1.13.0
 
 - Added Home Assistant **Ingress** support alongside the existing direct
@@ -7,8 +29,7 @@
   the same wifi network: the direct URL's host is often HA's `.local` mDNS
   hostname, and iOS's mDNS resolution in the HA app's embedded browser is
   known to be flaky. Ingress tunnels through HA's own already-working
-  connection instead, sidestepping that resolution entirely. No app code
-  changes needed — the dashboard already used only root-relative URLs.
+  connection instead, sidestepping that resolution entirely.
 
 ## 1.12.0
 

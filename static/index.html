@@ -4,7 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AP Monitor</title>
-<script src="/static/chart.umd.min.js"></script>
+<!-- Path-prefix-agnostic: a leading "/" always resolves against the domain
+     root, which breaks under HA's Ingress proxy (the add-on is served at a
+     "/api/hassio_ingress/<token>/" prefix, not the root). base + relative
+     (no leading slash) paths below resolve correctly under direct access,
+     Ingress, and reverse proxies alike. -->
+<base href="./">
+<script src="static/chart.umd.min.js"></script>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -122,7 +128,7 @@ function dispName(c){ return c.name || c.hostname || ""; }
 
 async function refreshClients(){
   let data;
-  try { data = await (await fetch("/api/clients")).json(); }
+  try { data = await (await fetch("api/clients")).json(); }
   catch(e){ document.getElementById("status").textContent="fetch error"; return; }
 
   document.getElementById("aps").innerHTML = (data.devices||[]).map(d =>
@@ -172,7 +178,7 @@ async function refreshClients(){
 
 async function refreshHistory(){
   let h;
-  try { h = await (await fetch("/api/history?hours="+windowHours)).json(); }
+  try { h = await (await fetch("api/history?hours="+windowHours)).json(); }
   catch(e){ return; }
   const labels = h.timestamps.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
   const datasets = h.aps.map((ap,i) => ({
@@ -190,7 +196,7 @@ async function refreshHistory(){
 
 async function refreshEvents(){
   let ev;
-  try { ev = (await (await fetch("/api/events?limit=80")).json()).events; }
+  try { ev = (await (await fetch("api/events?limit=80")).json()).events; }
   catch(e){ return; }
   const el = document.getElementById("events");
   el.innerHTML = ev.length ? ev.map(e =>
@@ -242,8 +248,8 @@ async function refreshHealth(){
   let h, outages;
   try {
     [h, outages] = await Promise.all([
-      (await fetch("/api/health?hours="+Math.max(24, windowHours))).json(),
-      (await fetch("/api/outages?hours=168")).json(),
+      (await fetch("api/health?hours="+Math.max(24, windowHours))).json(),
+      (await fetch("api/outages?hours=168")).json(),
     ]);
   }
   catch(e){ return; }
@@ -325,7 +331,7 @@ async function refreshHealth(){
 async function openClient(mac){
   openMac = mac;
   let d;
-  try { d = await (await fetch("/api/client/"+encodeURIComponent(mac)+"?hours="+Math.max(24,windowHours))).json(); }
+  try { d = await (await fetch("api/client/"+encodeURIComponent(mac)+"?hours="+Math.max(24,windowHours))).json(); }
   catch(e){ return; }
   const cur = d.current || {};
   const title = d.name || cur.hostname || mac;
@@ -377,7 +383,7 @@ async function openClient(mac){
 
 async function saveName(mac){
   const name = document.getElementById("nameInput").value;
-  await fetch("/api/name", { method:"POST", headers:{"Content-Type":"application/json"},
+  await fetch("api/name", { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ mac, name }) });
   document.getElementById("saveMsg").textContent = "saved";
   document.getElementById("mTitle").textContent = name || mac;
