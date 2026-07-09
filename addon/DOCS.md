@@ -60,7 +60,8 @@ installed), each AP is auto-discovered as a device with:
 
 - `binary_sensor.<ap>_online` (device_class *connectivity*)
 - `sensor.<ap>_clients` (current client count)
-- `sensor.<ap>_uptime`, `sensor.<ap>_load_1m`, `sensor.<ap>_memory_used`
+- `sensor.<ap>_uptime`, `sensor.<ap>_load_1m`, `sensor.<ap>_memory_used`,
+  `sensor.<ap>_temperature`, `sensor.<ap>_noise_2_4_ghz`, `sensor.<ap>_noise_5_ghz`
   (health metrics; also charted in the dashboard's **Health** tab)
 
 To get a phone notification when an AP drops, add an automation:

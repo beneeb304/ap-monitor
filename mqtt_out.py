@@ -80,6 +80,17 @@ class Publisher:
                 ("mem_used_pct", "Memory used", {"state_class": "measurement",
                                                  "unit_of_measurement": "%",
                                                  "icon": "mdi:memory"}),
+                ("temp", "Temperature", {"device_class": "temperature",
+                                         "state_class": "measurement",
+                                         "unit_of_measurement": "°C"}),
+                ("noise_24", "Noise 2.4 GHz", {"device_class": "signal_strength",
+                                               "state_class": "measurement",
+                                               "unit_of_measurement": "dBm",
+                                               "entity_category": "diagnostic"}),
+                ("noise_5", "Noise 5 GHz", {"device_class": "signal_strength",
+                                            "state_class": "measurement",
+                                            "unit_of_measurement": "dBm",
+                                            "entity_category": "diagnostic"}),
             ):
                 self._client.publish(
                     f"{self._disc}/sensor/ap_monitor_{slug}/{key}/config",
@@ -113,6 +124,13 @@ class Publisher:
                     pct = round((1 - h["mem_avail_kb"] / h["mem_total_kb"]) * 100, 1)
                     self._client.publish(f"{self._base}/{slug}/mem_used_pct",
                                          str(pct), retain=True)
+                if h.get("temp_c") is not None:
+                    self._client.publish(f"{self._base}/{slug}/temp",
+                                         str(h["temp_c"]), retain=True)
+                for band_key in ("noise_24", "noise_5"):
+                    if h.get(band_key) is not None:
+                        self._client.publish(f"{self._base}/{slug}/{band_key}",
+                                             str(h[band_key]), retain=True)
 
     def publish_events(self, events):
         """Publish each event as JSON to a per-kind topic:

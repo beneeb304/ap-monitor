@@ -25,6 +25,8 @@ printf '==LOADAVG==\n'
 cat /proc/loadavg 2>/dev/null
 printf '==MEMINFO==\n'
 grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo 2>/dev/null
+printf '==THERMAL==\n'
+cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
 """
 
 LEASES_CMD = "cat /tmp/dhcp.leases 2>/dev/null"
@@ -130,10 +132,10 @@ def _parse_health(text):
     Returns None if the section is missing entirely (e.g. SSH failed)."""
     if "==HEALTH==" not in text:
         return None
-    h, mem, mode = {}, {}, None
+    h, mem, temps, mode = {}, {}, [], None
     for line in text.split("==HEALTH==", 1)[1].splitlines():
         line = line.strip()
-        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO=="):
+        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO==", "==THERMAL=="):
             mode = line.strip("=")
             continue
         if not line:
@@ -148,11 +150,17 @@ def _parse_health(text):
             elif mode == "MEMINFO":
                 k, v = line.split(":", 1)
                 mem[k] = int(v.split()[0])
+            elif mode == "THERMAL":
+                temps.append(int(line))
         except (ValueError, IndexError):
             continue
     if mem:
         h["mem_total_kb"] = mem.get("MemTotal")
         h["mem_avail_kb"] = mem.get("MemAvailable", mem.get("MemFree"))
+    if temps:
+        # Hottest zone; sysfs reports millidegrees, some drivers plain degrees.
+        t = max(temps)
+        h["temp_c"] = round(t / 1000, 1) if t > 1000 else float(t)
     return h or None
 
 
@@ -174,11 +182,19 @@ def poll_device(device, cfg):
         return [], None, f"{type(e).__name__}: {e}"
 
     clients = []
+    noise_by_band = {}
     for dev, info, assoc in _parse_blocks(out):
         ssid = info.get("ssid", "")
         freq = info.get("frequency")
         band = band_from_freq(freq)
         channel = info.get("channel")
+        # Radio noise floor (dBm); 0/None means the driver doesn't report it.
+        # Keep the worst (highest) value if two radios share a band.
+        n = info.get("noise")
+        if n:
+            key = {"2.4 GHz": "noise_24", "5 GHz": "noise_5", "6 GHz": "noise_6"}.get(band)
+            if key:
+                noise_by_band[key] = max(n, noise_by_band.get(key, -999))
         for st in assoc.get("results", []):
             rx = st.get("rx", {}) or {}
             tx = st.get("tx", {}) or {}
@@ -198,7 +214,10 @@ def poll_device(device, cfg):
                 "rx_mbps": round(rx.get("rate", 0) / 1000) if rx.get("rate") else None,
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
-    return clients, _parse_health(out), None
+    health = _parse_health(out)
+    if noise_by_band:
+        health = {**(health or {}), **noise_by_band}
+    return clients, health, None
 
 
 def _dedupe(clients):

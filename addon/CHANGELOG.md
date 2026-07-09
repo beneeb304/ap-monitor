@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0
+
+- Health tab: temperature (hottest thermal zone) and per-band radio noise
+  floor, with a second history chart per AP. APs without thermal sensors
+  show "—" and skip the temp line.
+- Two new HA sensors per AP: Temperature (°C) and Noise 2.4/5 GHz (dBm,
+  diagnostic).
+
 ## 1.5.0
 
 - AP health metrics: uptime, load average, and memory usage are collected

@@ -5,16 +5,17 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 ## P2 — reliability & health telemetry
 
 1. **Radio channel utilization** — `ubus iwinfo survey` busy/active counters, computed as a delta between polls. The remaining piece of the AP-health work; explains flapping and slow-wifi complaints.
-2. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
-3. **Roam-storm / flapping detection** — a client bouncing between APs every few seconds indicates channel overlap or a sick radio; emit a `flapping` event when a MAC roams more than N times in M minutes.
+2. **Overlay/flash usage** — `df /overlay` per AP as a health metric + HA sensor. A full overlay (log growth, package cruft) causes weird OpenWrt failures nothing else explains; moves slowly so it's a spot-the-trend metric.
+3. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
+4. **Roam-storm / flapping detection** — a client bouncing between APs every few seconds indicates channel overlap or a sick radio; emit a `flapping` event when a MAC roams more than N times in M minutes.
 
 ## P3 — security
 
-4. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
+5. **Unknown-device alarm mode** — distinct `new_untrusted` event (and MQTT topic) for any MAC not in the named/known list, separate from informational new-device events.
 
 ## P4 — nice to have
 
-5. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
+6. **Persist dashboard AP filter in URL hash** (e.g. `#ap=Flint2`) so filtered views are bookmarkable from HA dashboards.
 
 ## Done
 
