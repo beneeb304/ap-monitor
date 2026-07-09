@@ -14,10 +14,13 @@ def _slug(name):
 
 
 class Publisher:
-    def __init__(self, mqtt_cfg, devices):
+    def __init__(self, mqtt_cfg, devices, channel_utilization=False):
         import paho.mqtt.client as mqtt  # imported lazily so paho stays optional
 
         self._devices = devices
+        # Only advertise channel-busy sensors when the feature is enabled;
+        # otherwise HA would show two permanently-"Unknown" entities per AP.
+        self._channel_utilization = channel_utilization
         self._base = mqtt_cfg.get("base_topic", "ap_monitor")
         self._disc = mqtt_cfg.get("discovery_prefix", "homeassistant")
         self._avail = f"{self._base}/availability"
@@ -71,7 +74,7 @@ class Publisher:
                 }),
                 retain=True,
             )
-            for key, name, extra in (
+            sensors = [
                 ("uptime", "Uptime", {"device_class": "duration",
                                       "unit_of_measurement": "s",
                                       "entity_category": "diagnostic"}),
@@ -91,13 +94,24 @@ class Publisher:
                                             "state_class": "measurement",
                                             "unit_of_measurement": "dBm",
                                             "entity_category": "diagnostic"}),
-                ("util_24", "Channel busy 2.4 GHz", {"state_class": "measurement",
-                                                     "unit_of_measurement": "%",
-                                                     "icon": "mdi:access-point"}),
-                ("util_5", "Channel busy 5 GHz", {"state_class": "measurement",
-                                                  "unit_of_measurement": "%",
-                                                  "icon": "mdi:access-point"}),
-            ):
+            ]
+            if self._channel_utilization:
+                sensors += [
+                    ("util_24", "Channel busy 2.4 GHz", {"state_class": "measurement",
+                                                         "unit_of_measurement": "%",
+                                                         "icon": "mdi:access-point"}),
+                    ("util_5", "Channel busy 5 GHz", {"state_class": "measurement",
+                                                      "unit_of_measurement": "%",
+                                                      "icon": "mdi:access-point"}),
+                ]
+            else:
+                # Self-heal installs that ran with channel_utilization on (or
+                # briefly defaulted on before this option existed): an empty
+                # retained payload removes a previously-discovered entity.
+                for key in ("util_24", "util_5"):
+                    self._client.publish(
+                        f"{self._disc}/sensor/ap_monitor_{slug}/{key}/config", "", retain=True)
+            for key, name, extra in sensors:
                 self._client.publish(
                     f"{self._disc}/sensor/ap_monitor_{slug}/{key}/config",
                     json.dumps({
@@ -158,7 +172,7 @@ def setup(cfg):
     if not mqtt_cfg or not mqtt_cfg.get("host"):
         return None
     try:
-        return Publisher(mqtt_cfg, cfg["devices"])
+        return Publisher(mqtt_cfg, cfg["devices"], bool(cfg.get("channel_utilization", False)))
     except Exception as e:  # noqa: BLE001 - MQTT is optional; never kill the app
         print(f"MQTT disabled ({type(e).__name__}: {e})")
         return None

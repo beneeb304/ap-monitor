@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.3
+
+- MQTT discovery no longer advertises "Channel busy 2.4/5 GHz" sensors
+  when `channel_utilization` is off (the new default from 1.7.2) — those
+  would otherwise sit in Home Assistant permanently showing "Unknown".
+  If you already updated to 1.7.2, this release also removes any such
+  entities it previously created (self-healing via an empty retained
+  discovery message).
+
 ## 1.7.2 — important fix, please update
 
 **Channel utilization (added in 1.7.0) is now opt-in and OFF by default.**
