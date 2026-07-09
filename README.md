@@ -186,6 +186,7 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 - The SSH key is sensitive — it grants root on your routers. It is git-ignored here; never commit it.
 - SSH host keys are **pinned on first connect** (stored in a `known_hosts` file next to the history DB). If you reflash an AP, delete its line from that file to re-pin; an unexpected `BadHostKeyException` you *didn't* cause deserves investigation.
 - For push notifications, use an HA automation on the MQTT event topics (see [`addon/DOCS.md`](addon/DOCS.md)); the on-page events feed shows the same history.
+- If an AP shows offline with the error **"iwinfo unreachable (rpcd likely crashed)"**, the AP itself is up (SSH and health metrics still work) but its `rpcd` process — which serves all wifi client/signal data — has died. SSH in and run `/etc/init.d/rpcd restart`; it typically recovers in seconds with no wifi disruption. `procd` usually respawns `rpcd` on its own within moments, so this is normally self-healing, but persistent recurrence on the same AP is worth investigating (see the channel-utilization caveat above for one known trigger).
 
 ## API
 

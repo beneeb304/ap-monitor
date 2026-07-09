@@ -137,3 +137,9 @@ action:
   its line from `/data/known_hosts` and it re-pins on the next poll.
 - For push notifications, use an HA automation on the MQTT event topics above —
   the on-page events feed shows the same history.
+- If an AP shows offline with error **"iwinfo unreachable (rpcd likely
+  crashed)"**, the AP is up (SSH/health still work) but its `rpcd` process —
+  which serves all wifi client/signal data — has died. SSH in and run
+  `/etc/init.d/rpcd restart`; it recovers in seconds with no wifi disruption.
+  `procd` usually respawns it on its own, so this is normally self-healing;
+  persistent recurrence on one AP is worth investigating.

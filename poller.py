@@ -231,10 +231,25 @@ def poll_device(device, cfg, include_survey=True):
     except Exception as e:  # noqa: BLE001 - report any SSH/connection failure
         return [], None, f"{type(e).__name__}: {e}"
 
+    blocks = _parse_blocks(out)
+    health = _parse_health(out)
+    # If the remote script ran (health section present) but ubus iwinfo
+    # returned nothing at all — zero radios enumerated, or every enumerated
+    # radio came back with empty info/assoc — that's rpcd/iwinfo down, not a
+    # genuinely quiet AP. Reproduced in production: rpcd crashed on a GL.iNet
+    # Flint 2's MediaTek driver, and this silently read as "0 clients,
+    # online" rather than a degraded AP. Route it through the existing
+    # offline-detection/debounce/MQTT pipeline with an actionable message.
+    if health is not None and (
+        not blocks or all(not info and not assoc for _, info, assoc, _ in blocks)
+    ):
+        return [], health, ("iwinfo unreachable (rpcd likely crashed) — "
+                            "try: /etc/init.d/rpcd restart on the AP")
+
     clients = []
     noise_by_band, util_by_band = {}, {}
     band_key = {"2.4 GHz": "24", "5 GHz": "5", "6 GHz": "6"}
-    for dev, info, assoc, survey in _parse_blocks(out):
+    for dev, info, assoc, survey in blocks:
         ssid = info.get("ssid", "")
         freq = info.get("frequency")
         band = band_from_freq(freq)
@@ -273,7 +288,6 @@ def poll_device(device, cfg, include_survey=True):
                 "rx_mbps": round(rx.get("rate", 0) / 1000) if rx.get("rate") else None,
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
-    health = _parse_health(out)
     if noise_by_band or util_by_band:
         health = {**(health or {}), **noise_by_band, **util_by_band}
     return clients, health, None

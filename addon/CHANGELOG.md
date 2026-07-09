@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0
+
+- Detect `rpcd`/iwinfo crashed vs. a genuinely quiet AP: previously, if
+  `ubus call iwinfo devices` returned nothing (confirmed to happen after an
+  rpcd crash — see 1.7.2), the poller reported "0 clients, online" —
+  indistinguishable from a real zero-client AP. Now that specific failure
+  shows the AP as offline with a distinct, actionable error: "iwinfo
+  unreachable (rpcd likely crashed) — try: /etc/init.d/rpcd restart on the
+  AP". Health metrics (uptime/load/memory/temp) are unaffected since they
+  don't depend on iwinfo. Reuses the existing offline/debounce/MQTT
+  pipeline, so no new event types or schema.
+
 ## 1.7.3
 
 - MQTT discovery no longer advertises "Channel busy 2.4/5 GHz" sensors
