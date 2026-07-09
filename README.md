@@ -160,6 +160,30 @@ known iOS issue: mDNS `.local` hostname resolution in the HA app's embedded
 browser is flaky; Ingress tunnels through HA's existing connection instead of
 resolving a separate hostname, sidestepping it).
 
+### Add to iPhone Home Screen
+
+The dashboard can run as a standalone, full-screen "app" on iOS with no
+Safari chrome, independent of the Home Assistant app:
+
+1. In Safari (not the HA app), open the add-on's **direct** URL —
+   `http://<home-assistant-ip>:8088` — using the **raw LAN IP**, not a
+   `.local` hostname. This has to be the direct URL, not an Ingress link:
+   Ingress requires an active, authenticated HA session and isn't meant to
+   be bookmarked standalone.
+2. Tap the **Share** button → **Add to Home Screen**.
+3. The resulting icon launches full-screen (no address bar), using the app's
+   own icon and name — the page declares `apple-mobile-web-app-capable` and
+   an `apple-touch-icon` for this.
+
+Two things worth knowing:
+
+- This only works on the same LAN as Home Assistant (no Ingress/Nabu
+  Casa tunnel = no remote access) unless you separately set up a VPN or
+  similar back to your home network.
+- A raw IP can change if your router reassigns it. Set a **DHCP
+  reservation** for the Home Assistant host in your router so the address
+  — and this bookmark — stays valid indefinitely.
+
 ## Configuration reference
 
 | Key | Description |

@@ -6,6 +6,7 @@ No open items — everything below has shipped or been deliberately dropped.
 
 ## Done
 
+- **iOS home-screen app support** — apple-touch-icon + web app manifest so bookmarking the direct-access URL from Safari launches the dashboard full-screen, no browser chrome, independent of the HA app (v1.14.0, 2026-07).
 - **HA Ingress support** — fixes "Open Web UI" failing on iPhone/iPad on the same wifi network (iOS mDNS resolution of the add-on's `.local` direct-access hostname is flaky in the HA app's embedded browser); Ingress tunnels through HA's own connection instead. Kept alongside the existing direct-port access (v1.13.0, 2026-07). Follow-up fix in v1.13.1: the dashboard's fetch calls and script tag used leading-slash (domain-root-relative) URLs, which escape Ingress's path prefix and 404/error against HA's own core server — switched to `<base href="./">` + plain relative paths, verified against a simulated Ingress-prefixed deployment.
 - ~~Persist dashboard AP filter in URL hash~~ — dropped: not actually needed.
 - **Unknown-device alarm mode** — opt-in `known_macs` allowlist; a new device not on it fires a distinct `new_untrusted` event (red dashboard badge + MQTT topic), on top of the routine `new` event. Takes priority over `new_random` routing. Off by default — no behavior change unless configured (v1.12.0, 2026-07).

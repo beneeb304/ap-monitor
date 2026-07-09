@@ -36,6 +36,18 @@ iPhone/iPad even on the same wifi network). If "Open Web UI" fails to load
 on an iPhone but works fine on a Mac, this is almost always why — Ingress
 sidesteps it entirely since it never needs to resolve that hostname.
 
+### Standalone home-screen app (bypasses the HA app entirely)
+
+In Safari (not the HA app), open the add-on's **direct** URL — ideally the
+raw LAN IP, e.g. `http://10.0.0.10:8088`, not a `.local` hostname — then
+**Share → Add to Home Screen**. The page is set up to launch full-screen
+with no browser chrome, using its own icon and title. This must be the
+direct URL, not an Ingress link (Ingress needs an active HA session, so
+it can't be bookmarked standalone), and only works on the same LAN as HA
+unless you have separate remote access (VPN, etc.) back to your network.
+Give the Home Assistant host a DHCP reservation so the IP — and the
+bookmark — doesn't break later.
+
 ## `share/ap-monitor/config.yaml`
 
 ```yaml

@@ -10,6 +10,17 @@
      (no leading slash) paths below resolve correctly under direct access,
      Ingress, and reverse proxies alike. -->
 <base href="./">
+<!-- iOS "Add to Home Screen": launches full-screen with no browser chrome
+     when these are present. Bookmark the add-on's direct-access URL (not
+     an Ingress URL, which needs an active HA session) — ideally a raw LAN
+     IP rather than a .local hostname, since iOS's mDNS resolution is flaky
+     in some contexts. See README for details. -->
+<link rel="apple-touch-icon" href="static/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AP Monitor">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="static/manifest.json">
 <script src="static/chart.umd.min.js"></script>
 <style>
   :root { color-scheme: dark; }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.14.0
+
+- iOS "Add to Home Screen" support: the dashboard now declares an
+  `apple-touch-icon`, `apple-mobile-web-app-capable`, and a web app
+  manifest, so bookmarking the add-on's direct URL from Safari launches
+  it full-screen with no browser chrome — a standalone "app" independent
+  of the Home Assistant app. Must use the direct URL (raw LAN IP
+  recommended over a `.local` hostname), not an Ingress link, since
+  Ingress needs an active HA session. See README / addon/DOCS.md for
+  setup steps.
+
 ## 1.13.1 — follow-up fix for 1.13.0's Ingress support
 
 1.13.0 enabled Ingress but the dashboard itself wasn't actually ready for
