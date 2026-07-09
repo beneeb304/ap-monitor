@@ -17,6 +17,8 @@ for dev in $(ubus call iwinfo devices 2>/dev/null | jsonfilter -e '@.devices[*]'
   ubus call iwinfo info "{\"device\":\"$dev\"}" 2>/dev/null
   printf '\n==ASSOC==\n'
   ubus call iwinfo assoclist "{\"device\":\"$dev\"}" 2>/dev/null
+  printf '\n==SURVEY==\n'
+  ubus call iwinfo survey "{\"device\":\"$dev\"}" 2>/dev/null
   printf '\n==END==\n'
 done
 printf '==HEALTH==\n==UPTIME==\n'
@@ -30,6 +32,23 @@ cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
 """
 
 LEASES_CMD = "cat /tmp/dhcp.leases 2>/dev/null"
+
+# Last (active_time, busy_time) per (ap, radio): iwinfo survey counters are
+# cumulative since boot, so utilization is the delta between two polls.
+_survey_cache = {}
+
+
+def _util_pct(cache_key, entry):
+    """Channel busy %% from cumulative survey counters; None until we have
+    two samples, or after a counter reset (AP reboot)."""
+    act, busy = entry.get("active_time"), entry.get("busy_time")
+    if act is None or busy is None:
+        return None
+    prev = _survey_cache.get(cache_key)
+    _survey_cache[cache_key] = (act, busy)
+    if prev and act > prev[0] and busy >= prev[1]:
+        return round((busy - prev[1]) / (act - prev[0]) * 100, 1)
+    return None
 
 
 def band_from_freq(mhz):
@@ -94,26 +113,31 @@ def _ssh_run(host, cfg, command):
 
 
 def _parse_blocks(text):
-    """Yield (info_dict, assoc_dict) per radio device from REMOTE_CMD output."""
+    """Yield (dev, info_dict, assoc_dict, survey_dict) per radio device."""
     blocks = []
     cur_dev = None
-    info_lines, assoc_lines = [], []
+    info_lines, assoc_lines, survey_lines = [], [], []
     mode = None
     for line in text.splitlines():
         if line.startswith("==DEV "):
             cur_dev = line[6:].rstrip("=").strip()
-            info_lines, assoc_lines, mode = [], [], "info"
+            info_lines, assoc_lines, survey_lines, mode = [], [], [], "info"
         elif line == "==ASSOC==":
             mode = "assoc"
+        elif line == "==SURVEY==":
+            mode = "survey"
         elif line == "==END==":
             info = _safe_json("\n".join(info_lines))
             assoc = _safe_json("\n".join(assoc_lines))
-            blocks.append((cur_dev, info, assoc))
+            survey = _safe_json("\n".join(survey_lines))
+            blocks.append((cur_dev, info, assoc, survey))
             mode = None
         elif mode == "info":
             info_lines.append(line)
         elif mode == "assoc":
             assoc_lines.append(line)
+        elif mode == "survey":
+            survey_lines.append(line)
     return blocks
 
 
@@ -182,19 +206,28 @@ def poll_device(device, cfg):
         return [], None, f"{type(e).__name__}: {e}"
 
     clients = []
-    noise_by_band = {}
-    for dev, info, assoc in _parse_blocks(out):
+    noise_by_band, util_by_band = {}, {}
+    band_key = {"2.4 GHz": "24", "5 GHz": "5", "6 GHz": "6"}
+    for dev, info, assoc, survey in _parse_blocks(out):
         ssid = info.get("ssid", "")
         freq = info.get("frequency")
         band = band_from_freq(freq)
+        bk = band_key.get(band)
         channel = info.get("channel")
         # Radio noise floor (dBm); 0/None means the driver doesn't report it.
         # Keep the worst (highest) value if two radios share a band.
         n = info.get("noise")
-        if n:
-            key = {"2.4 GHz": "noise_24", "5 GHz": "noise_5", "6 GHz": "noise_6"}.get(band)
-            if key:
-                noise_by_band[key] = max(n, noise_by_band.get(key, -999))
+        if n and bk:
+            k = f"noise_{bk}"
+            noise_by_band[k] = max(n, noise_by_band.get(k, -999))
+        # Channel utilization for the operating frequency, worst per band.
+        entry = next((r for r in (survey or {}).get("results", [])
+                      if r.get("mhz") == freq), None)
+        if entry and bk:
+            pct = _util_pct((device["name"], dev), entry)
+            if pct is not None:
+                k = f"util_{bk}"
+                util_by_band[k] = max(pct, util_by_band.get(k, -1))
         for st in assoc.get("results", []):
             rx = st.get("rx", {}) or {}
             tx = st.get("tx", {}) or {}
@@ -215,8 +248,8 @@ def poll_device(device, cfg):
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
     health = _parse_health(out)
-    if noise_by_band:
-        health = {**(health or {}), **noise_by_band}
+    if noise_by_band or util_by_band:
+        health = {**(health or {}), **noise_by_band, **util_by_band}
     return clients, health, None
 
 

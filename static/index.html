@@ -257,18 +257,23 @@ async function refreshHealth(){
         <div class="cell"><div class="k">Memory used</div><div class="v">${s.mem_used_pct[last]!=null?s.mem_used_pct[last]+'%':'—'}</div></div>
         <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+degLbl:'—'}</div></div>
         <div class="cell"><div class="k">Noise 2.4/5 GHz</div><div class="v">${s.noise_24[last]!=null?s.noise_24[last]:'—'} / ${s.noise_5[last]!=null?s.noise_5[last]:'—'} dBm</div></div>
+        <div class="cell"><div class="k">Busy 2.4/5 GHz</div><div class="v">${s.util_24[last]!=null?s.util_24[last]+'%':'—'} / ${s.util_5[last]!=null?s.util_5[last]+'%':'—'}</div></div>
       </div>
       <canvas height="70"></canvas>
       ${hasTemp||hasNoise ? '<canvas class="c2" height="70" style="margin-top:10px"></canvas>' : ''}`;
     wrap.appendChild(el);
     const labels = s.ts.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+    const ds1 = [
+      Object.assign(line("Load (1m)", s.load1, COLORS[1], "y"), {backgroundColor: COLORS[1]+"22"}),
+      line("Mem used %", s.mem_used_pct, COLORS[3], "y2"),
+    ];
+    if(s.util_24.some(v=>v!=null)) ds1.push(line("Busy 2.4 GHz %", s.util_24, COLORS[2], "y2"));
+    if(s.util_5.some(v=>v!=null)) ds1.push(line("Busy 5 GHz %", s.util_5, COLORS[5], "y2"));
+    if(s.util_6.some(v=>v!=null)) ds1.push(line("Busy 6 GHz %", s.util_6, COLORS[6], "y2"));
     healthCharts[ap+"_1"] = new Chart(el.querySelector("canvas"), {
       type: "line",
-      data: { labels, datasets: [
-        Object.assign(line("Load (1m)", s.load1, COLORS[1], "y"), {backgroundColor: COLORS[1]+"22"}),
-        line("Mem used %", s.mem_used_pct, COLORS[3], "y2"),
-      ]},
-      options: chartOpts('load', 'mem %', {min:0, max:100})
+      data: { labels, datasets: ds1 },
+      options: chartOpts('load', '%', {min:0, max:100})
     });
     const c2 = el.querySelector(".c2");
     if(c2){

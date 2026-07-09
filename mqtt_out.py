@@ -91,6 +91,12 @@ class Publisher:
                                             "state_class": "measurement",
                                             "unit_of_measurement": "dBm",
                                             "entity_category": "diagnostic"}),
+                ("util_24", "Channel busy 2.4 GHz", {"state_class": "measurement",
+                                                     "unit_of_measurement": "%",
+                                                     "icon": "mdi:access-point"}),
+                ("util_5", "Channel busy 5 GHz", {"state_class": "measurement",
+                                                  "unit_of_measurement": "%",
+                                                  "icon": "mdi:access-point"}),
             ):
                 self._client.publish(
                     f"{self._disc}/sensor/ap_monitor_{slug}/{key}/config",
@@ -127,7 +133,7 @@ class Publisher:
                 if h.get("temp_c") is not None:
                     self._client.publish(f"{self._base}/{slug}/temp",
                                          str(h["temp_c"]), retain=True)
-                for band_key in ("noise_24", "noise_5"):
+                for band_key in ("noise_24", "noise_5", "util_24", "util_5"):
                     if h.get(band_key) is not None:
                         self._client.publish(f"{self._base}/{slug}/{band_key}",
                                              str(h[band_key]), retain=True)

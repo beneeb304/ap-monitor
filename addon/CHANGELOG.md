@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+
+- Radio channel utilization (busy %) per band, computed as the delta of
+  `iwinfo survey` counters between polls. Shown as a Health-tab tile and
+  chart lines, plus HA sensors "Channel busy 2.4/5 GHz". Needs two polls
+  after startup before the first value appears; driver support varies.
+
 ## 1.6.1
 
 - New `temp_unit: F` config option shows dashboard temperatures in

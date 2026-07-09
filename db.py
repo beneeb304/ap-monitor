@@ -70,14 +70,16 @@ def init(path):
                 ts INTEGER NOT NULL, ap TEXT NOT NULL, uptime INTEGER,
                 load1 REAL, load5 REAL, load15 REAL,
                 mem_total INTEGER, mem_avail INTEGER,
-                temp REAL, noise_24 INTEGER, noise_5 INTEGER, noise_6 INTEGER
+                temp REAL, noise_24 INTEGER, noise_5 INTEGER, noise_6 INTEGER,
+                util_24 REAL, util_5 REAL, util_6 REAL
             );
             CREATE INDEX IF NOT EXISTS idx_ap_health ON ap_health(ap, ts);
             """
         )
-        # Migrate ap_health tables created before temp/noise existed.
+        # Migrate ap_health tables created before temp/noise/utilization existed.
         for col, typ in (("temp", "REAL"), ("noise_24", "INTEGER"),
-                         ("noise_5", "INTEGER"), ("noise_6", "INTEGER")):
+                         ("noise_5", "INTEGER"), ("noise_6", "INTEGER"),
+                         ("util_24", "REAL"), ("util_5", "REAL"), ("util_6", "REAL")):
             try:
                 conn.execute(f"ALTER TABLE ap_health ADD COLUMN {col} {typ}")
             except sqlite3.OperationalError:
@@ -172,10 +174,12 @@ def record(path, snap, retention_days, sample_interval):
                                        "uptime_s": up})
                 conn.execute(
                     "INSERT INTO ap_health (ts,ap,uptime,load1,load5,load15,mem_total,mem_avail,"
-                    "temp,noise_24,noise_5,noise_6) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "temp,noise_24,noise_5,noise_6,util_24,util_5,util_6) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (ts, d["name"], up, h.get("load1"), h.get("load5"), h.get("load15"),
                      h.get("mem_total_kb"), h.get("mem_avail_kb"), h.get("temp_c"),
-                     h.get("noise_24"), h.get("noise_5"), h.get("noise_6")),
+                     h.get("noise_24"), h.get("noise_5"), h.get("noise_6"),
+                     h.get("util_24"), h.get("util_5"), h.get("util_6")),
                 )
 
         if write_samples:
@@ -256,7 +260,7 @@ def health(path, hours):
     with _connect(path) as conn:
         rows = conn.execute(
             "SELECT ts, ap, uptime, load1, mem_total, mem_avail, temp, "
-            "noise_24, noise_5, noise_6 FROM ap_health "
+            "noise_24, noise_5, noise_6, util_24, util_5, util_6 FROM ap_health "
             "WHERE ts >= ? ORDER BY ts",
             (start,),
         ).fetchall()
@@ -266,7 +270,8 @@ def health(path, hours):
         if ap not in series:
             aps.append(ap)
             series[ap] = {"ts": [], "uptime": [], "load1": [], "mem_used_pct": [],
-                          "temp": [], "noise_24": [], "noise_5": [], "noise_6": []}
+                          "temp": [], "noise_24": [], "noise_5": [], "noise_6": [],
+                          "util_24": [], "util_5": [], "util_6": []}
         s = series[ap]
         s["ts"].append(r["ts"])
         s["uptime"].append(r["uptime"])
@@ -279,6 +284,9 @@ def health(path, hours):
         s["noise_24"].append(r["noise_24"])
         s["noise_5"].append(r["noise_5"])
         s["noise_6"].append(r["noise_6"])
+        s["util_24"].append(r["util_24"])
+        s["util_5"].append(r["util_5"])
+        s["util_6"].append(r["util_6"])
     return {"aps": aps, "series": series}
 
 
