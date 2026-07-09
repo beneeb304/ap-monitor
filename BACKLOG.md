@@ -18,7 +18,7 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## Done
 
-- **Radio channel utilization** — per-band busy % from survey counter deltas, Health tab + HA sensors (v1.7.0, 2026-07).
+- **Radio channel utilization** — per-band busy % from survey counter deltas, Health tab + HA sensors (v1.7.0, 2026-07). Found in production to crash `rpcd` on MediaTek/mt76 firmware (verified on a GL.iNet Flint 2), taking down all iwinfo-derived monitoring for that AP; made opt-in and off by default in v1.7.2, with MQTT discovery for its sensors also gated in v1.7.3.
 - **Temperature + noise floor** — hottest thermal zone and per-band radio noise, Health tab chart + HA sensors (v1.6.0, 2026-07).
 - **AP health metrics + Health tab** — uptime/load/memory over SSH, HA sensors via discovery, dashboard Health tab with history charts, silent-reboot events (v1.5.0, 2026-07).
 - **SSH host-key pinning** — trust-on-first-use pinning in the poller; changed keys reject the connection (v1.4.0, 2026-07).

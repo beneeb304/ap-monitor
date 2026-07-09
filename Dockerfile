@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py poller.py db.py vendor.py oui.csv.gz ./
+COPY app.py poller.py db.py mqtt_out.py vendor.py oui.csv.gz ./
 COPY static/ ./static/
 
 EXPOSE 8088

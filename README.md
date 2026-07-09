@@ -14,7 +14,7 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **Per-client drill-down**: click any device for its signal-over-time chart, roaming history, and first/last seen
 - **History graph**: clients-per-AP over the last 1h / 6h / 24h
 - **AP offline detection & alerting**: debounced up/down tracking per AP, an outage event log, and optional **MQTT publishing with Home Assistant discovery** (each AP becomes a connectivity `binary_sensor` + client-count `sensor` — alert from any HA automation)
-- **AP health metrics (Health tab)**: uptime, load, memory, temperature, per-band radio noise floor, and channel utilization per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
+- **AP health metrics (Health tab)**: uptime, load, memory, temperature, per-band radio noise floor, and channel utilization (opt-in, see caveat below) per AP, with history charts and HA sensors — see [Interpreting health metrics](#interpreting-health-metrics)
 - **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
 - **MQTT event topics**: new-device, roam, AP up/down, and reboot events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
 - **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
