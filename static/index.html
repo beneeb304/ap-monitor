@@ -64,6 +64,10 @@
 <body>
 <header>
   <h1>AP Monitor</h1>
+  <nav style="display:flex;gap:6px">
+    <button class="btn tab active" data-tab="clients">Clients</button>
+    <button class="btn tab" data-tab="health">Health</button>
+  </nav>
   <div class="aps" id="aps"></div>
   <div class="controls" style="margin-left:auto">
     <input type="search" id="search" placeholder="Search name / host / IP / MAC / vendor / AP…" autocomplete="off">
@@ -72,17 +76,20 @@
 </header>
 <main>
   <div>
-    <div class="panel">
-      <h3>Clients per AP
-        <span style="float:right">
-          <button class="btn win active" data-h="1">1h</button>
-          <button class="btn win" data-h="6">6h</button>
-          <button class="btn win" data-h="24">24h</button>
-        </span>
-      </h3>
-      <canvas id="chart" height="90"></canvas>
+    <div id="view-clients">
+      <div class="panel">
+        <h3>Clients per AP
+          <span style="float:right">
+            <button class="btn win active" data-h="1">1h</button>
+            <button class="btn win" data-h="6">6h</button>
+            <button class="btn win" data-h="24">24h</button>
+          </span>
+        </h3>
+        <canvas id="chart" height="90"></canvas>
+      </div>
+      <div id="tables"></div>
     </div>
-    <div id="tables"></div>
+    <div id="view-health" style="display:none"></div>
   </div>
   <div class="panel">
     <h3>Events</h3>
@@ -97,6 +104,7 @@
 <script>
 const COLORS = ["#3ddc84","#5a8cff","#ffc857","#ff7ab8","#9d7aff","#4ad9d9","#ff9a5a"];
 let chart, clientChart, windowHours = 1, openMac = null, apFilter = null;
+let tab = "clients", healthCharts = {};
 
 function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
 function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
@@ -195,6 +203,62 @@ async function refreshEvents(){
     d.addEventListener("click", () => openClient(d.dataset.mac)));
 }
 
+function setTab(t){
+  tab = t;
+  document.getElementById("view-clients").style.display = t==="clients" ? "" : "none";
+  document.getElementById("view-health").style.display = t==="health" ? "" : "none";
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab===t));
+  if(t==="health") refreshHealth();
+}
+
+function fmtUptime(s){
+  if(s==null) return "—";
+  const d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60);
+  return d ? d+"d "+h+"h" : h ? h+"h "+m+"m" : m+"m";
+}
+
+async function refreshHealth(){
+  if(tab!=="health") return;
+  let h;
+  try { h = await (await fetch("/api/health?hours="+Math.max(24, windowHours))).json(); }
+  catch(e){ return; }
+  const wrap = document.getElementById("view-health");
+  Object.values(healthCharts).forEach(c => c.destroy());
+  healthCharts = {};
+  wrap.innerHTML = h.aps.length ? "" :
+    '<p class="muted">No health samples yet — they are collected every 30 seconds, so give it a minute after updating.</p>';
+  h.aps.forEach(ap => {
+    const s = h.series[ap], last = s.ts.length-1;
+    const el = document.createElement("div");
+    el.className = "panel";
+    el.innerHTML = `<h3>${esc(ap)}</h3>
+      <div class="grid">
+        <div class="cell"><div class="k">Uptime</div><div class="v">${fmtUptime(s.uptime[last])}</div></div>
+        <div class="cell"><div class="k">Load (1m)</div><div class="v">${s.load1[last]!=null?s.load1[last]:'—'}</div></div>
+        <div class="cell"><div class="k">Memory used</div><div class="v">${s.mem_used_pct[last]!=null?s.mem_used_pct[last]+'%':'—'}</div></div>
+      </div>
+      <canvas height="70"></canvas>`;
+    wrap.appendChild(el);
+    const labels = s.ts.map(t => new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+    healthCharts[ap] = new Chart(el.querySelector("canvas"), {
+      type: "line",
+      data: { labels, datasets: [
+        { label: "Load (1m)", data: s.load1, borderColor: COLORS[1], backgroundColor: COLORS[1]+"22",
+          borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: "y" },
+        { label: "Mem used %", data: s.mem_used_pct, borderColor: COLORS[3],
+          borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: "y2" },
+      ]},
+      options: { animation:false, responsive:true, interaction:{mode:'index',intersect:false},
+        scales:{ x:{ticks:{color:'#8a93a3',maxTicksLimit:8},grid:{color:'#1c222b'}},
+                 y:{beginAtZero:true,ticks:{color:'#8a93a3'},grid:{color:'#1c222b'},
+                    title:{display:true,text:'load',color:'#8a93a3'}},
+                 y2:{position:'right',min:0,max:100,ticks:{color:'#8a93a3'},
+                     grid:{drawOnChartArea:false},title:{display:true,text:'mem %',color:'#8a93a3'}} },
+        plugins:{ legend:{labels:{color:'#cdd5e0',boxWidth:12}} } }
+    });
+  });
+}
+
 async function openClient(mac){
   openMac = mac;
   let d;
@@ -266,11 +330,13 @@ document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () =>
   b.classList.add("active"); windowHours = +b.dataset.h; refreshHistory();
 }));
 document.getElementById("search").addEventListener("input", refreshClients);
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
 refreshClients(); refreshHistory(); refreshEvents();
 setInterval(refreshClients, 3000);
 setInterval(refreshEvents, 4000);
 setInterval(refreshHistory, 15000);
+setInterval(refreshHealth, 30000);
 </script>
 </body>
 </html>

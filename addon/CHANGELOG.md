@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0
+
+- AP health metrics: uptime, load average, and memory usage are collected
+  every poll over the existing SSH session.
+- New **Health** tab in the dashboard with per-AP current stats and history
+  charts (load + memory over time).
+- Three new HA sensors per AP via MQTT discovery: Uptime, Load (1m),
+  Memory used %.
+- Silent-reboot detection: if an AP's uptime goes backwards, an `ap_reboot`
+  event is published to `ap_monitor/events/ap_reboot`.
+
 ## 1.4.0
 
 - Security: SSH host keys are now pinned on first connect and changes are

@@ -71,6 +71,27 @@ class Publisher:
                 }),
                 retain=True,
             )
+            for key, name, extra in (
+                ("uptime", "Uptime", {"device_class": "duration",
+                                      "unit_of_measurement": "s",
+                                      "entity_category": "diagnostic"}),
+                ("load1", "Load (1m)", {"state_class": "measurement",
+                                        "icon": "mdi:chip"}),
+                ("mem_used_pct", "Memory used", {"state_class": "measurement",
+                                                 "unit_of_measurement": "%",
+                                                 "icon": "mdi:memory"}),
+            ):
+                self._client.publish(
+                    f"{self._disc}/sensor/ap_monitor_{slug}/{key}/config",
+                    json.dumps({
+                        "name": name,
+                        "unique_id": f"ap_monitor_{slug}_{key}",
+                        "state_topic": f"{self._base}/{slug}/{key}",
+                        **extra,
+                        **common,
+                    }),
+                    retain=True,
+                )
 
     def publish(self, statuses):
         """Push debounced state for every AP: [{name, online, client_count}]."""
@@ -80,6 +101,18 @@ class Publisher:
                                  "ON" if s["online"] else "OFF", retain=True)
             self._client.publish(f"{self._base}/{slug}/clients",
                                  str(s.get("client_count", 0)), retain=True)
+            h = s.get("health")
+            if h:
+                if h.get("uptime_s") is not None:
+                    self._client.publish(f"{self._base}/{slug}/uptime",
+                                         str(h["uptime_s"]), retain=True)
+                if h.get("load1") is not None:
+                    self._client.publish(f"{self._base}/{slug}/load1",
+                                         str(h["load1"]), retain=True)
+                if h.get("mem_total_kb") and h.get("mem_avail_kb") is not None:
+                    pct = round((1 - h["mem_avail_kb"] / h["mem_total_kb"]) * 100, 1)
+                    self._client.publish(f"{self._base}/{slug}/mem_used_pct",
+                                         str(pct), retain=True)
 
     def publish_events(self, events):
         """Publish each event as JSON to a per-kind topic:

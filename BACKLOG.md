@@ -4,7 +4,7 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## P2 — reliability & health telemetry
 
-1. **AP health metrics over the existing SSH session** — uptime (detects silent reboots), load average, free memory, radio channel utilization (`ubus iwinfo survey`). Expose as extra HA sensors per AP via MQTT discovery. A rebooting AP with rising memory pressure is the classic OpenWrt failure signature; this makes the *cause* of AP drops diagnosable.
+1. **Radio channel utilization** — `ubus iwinfo survey` busy/active counters, computed as a delta between polls. The remaining piece of the AP-health work; explains flapping and slow-wifi complaints.
 2. **Uptime % / outage summary panel** — data already exists in `ap_events`. Dashboard card per AP: "last 7 days: 99.8%, 3 outages, longest 12m", plus outage times to spot patterns (time of day, one AP vs both).
 3. **Roam-storm / flapping detection** — a client bouncing between APs every few seconds indicates channel overlap or a sick radio; emit a `flapping` event when a MAC roams more than N times in M minutes.
 
@@ -18,6 +18,7 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## Done
 
+- **AP health metrics + Health tab** — uptime/load/memory over SSH, HA sensors via discovery, dashboard Health tab with history charts, silent-reboot events (v1.5.0, 2026-07).
 - **SSH host-key pinning** — trust-on-first-use pinning in the poller; changed keys reject the connection (v1.4.0, 2026-07).
 - **Publish events to MQTT** — new-device/roam/AP up-down events published to `ap_monitor/events/<kind>` (v1.3.0, 2026-07).
 - **Randomized-MAC handling** — new locally-administered MACs go to a separate `new_random` topic (v1.3.0, 2026-07).

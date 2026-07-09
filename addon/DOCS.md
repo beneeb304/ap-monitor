@@ -60,6 +60,8 @@ installed), each AP is auto-discovered as a device with:
 
 - `binary_sensor.<ap>_online` (device_class *connectivity*)
 - `sensor.<ap>_clients` (current client count)
+- `sensor.<ap>_uptime`, `sensor.<ap>_load_1m`, `sensor.<ap>_memory_used`
+  (health metrics; also charted in the dashboard's **Health** tab)
 
 To get a phone notification when an AP drops, add an automation:
 
@@ -89,6 +91,7 @@ Every event is also published as JSON to a per-kind MQTT topic (not retained):
   rotation; usually not alert-worthy — kept separate to avoid alert noise)
 - `ap_monitor/events/roam` — client moved between APs
 - `ap_monitor/events/ap_offline` / `ap_monitor/events/ap_online`
+- `ap_monitor/events/ap_reboot` — an AP's uptime went backwards (silent reboot)
 
 Example automation — notify when a genuinely new device joins:
 

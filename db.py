@@ -65,6 +65,13 @@ def init(path):
                 online INTEGER NOT NULL, error TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_ap_events_ts ON ap_events(ts);
+
+            CREATE TABLE IF NOT EXISTS ap_health (
+                ts INTEGER NOT NULL, ap TEXT NOT NULL, uptime INTEGER,
+                load1 REAL, load5 REAL, load15 REAL,
+                mem_total INTEGER, mem_avail INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_ap_health ON ap_health(ap, ts);
             """
         )
 
@@ -138,6 +145,30 @@ def record(path, snap, retention_days, sample_interval):
                     (ts, mac, c["ap"], c.get("signal")),
                 )
 
+        # --- AP health samples + silent-reboot detection ---
+        # Gated on the sample interval like client samples; uptime going
+        # backwards between consecutive samples means the AP rebooted.
+        if write_samples:
+            for d in snap["devices"]:
+                h = d.get("health")
+                if not h:
+                    continue
+                prev = conn.execute(
+                    "SELECT uptime FROM ap_health WHERE ap=? ORDER BY ts DESC LIMIT 1",
+                    (d["name"],),
+                ).fetchone()
+                up = h.get("uptime_s")
+                if prev is not None and prev["uptime"] is not None and up is not None \
+                        and up < prev["uptime"]:
+                    new_events.append({"ts": ts, "kind": "ap_reboot", "ap": d["name"],
+                                       "uptime_s": up})
+                conn.execute(
+                    "INSERT INTO ap_health (ts,ap,uptime,load1,load5,load15,mem_total,mem_avail) "
+                    "VALUES (?,?,?,?,?,?,?,?)",
+                    (ts, d["name"], up, h.get("load1"), h.get("load5"), h.get("load15"),
+                     h.get("mem_total_kb"), h.get("mem_avail_kb")),
+                )
+
         if write_samples:
             _last_sample_ts = ts
 
@@ -147,6 +178,7 @@ def record(path, snap, retention_days, sample_interval):
         conn.execute("DELETE FROM new_device_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM ap_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_samples WHERE ts < ?", (cutoff,))
+        conn.execute("DELETE FROM ap_health WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_loc WHERE last_ts < ?", (cutoff,))
     return new_events
 
@@ -207,6 +239,32 @@ def history(path, hours):
         table[r["bts"]][r["ap"]] = round(r["c"], 1)
     series = {ap: [table[b].get(ap) for b in buckets] for ap in aps}
     return {"timestamps": buckets, "aps": aps, "series": series}
+
+
+def health(path, hours):
+    """Per-AP health series for the last `hours`: uptime, load, memory-used %."""
+    start = int(time.time()) - int(hours * 3600)
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT ts, ap, uptime, load1, mem_total, mem_avail FROM ap_health "
+            "WHERE ts >= ? ORDER BY ts",
+            (start,),
+        ).fetchall()
+    aps, series = [], {}
+    for r in rows:
+        ap = r["ap"]
+        if ap not in series:
+            aps.append(ap)
+            series[ap] = {"ts": [], "uptime": [], "load1": [], "mem_used_pct": []}
+        s = series[ap]
+        s["ts"].append(r["ts"])
+        s["uptime"].append(r["uptime"])
+        s["load1"].append(r["load1"])
+        pct = None
+        if r["mem_total"] and r["mem_avail"] is not None:
+            pct = round((1 - r["mem_avail"] / r["mem_total"]) * 100, 1)
+        s["mem_used_pct"].append(pct)
+    return {"aps": aps, "series": series}
 
 
 def events(path, limit=100):

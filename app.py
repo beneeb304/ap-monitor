@@ -82,6 +82,12 @@ def api_history():
     return jsonify(db.history(DB_PATH, hours))
 
 
+@app.route("/api/health")
+def api_health():
+    hours = float(request.args.get("hours", 24))
+    return jsonify(db.health(DB_PATH, hours))
+
+
 @app.route("/api/events")
 def api_events():
     limit = int(request.args.get("limit", 100))

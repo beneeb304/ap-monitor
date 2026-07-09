@@ -19,6 +19,12 @@ for dev in $(ubus call iwinfo devices 2>/dev/null | jsonfilter -e '@.devices[*]'
   ubus call iwinfo assoclist "{\"device\":\"$dev\"}" 2>/dev/null
   printf '\n==END==\n'
 done
+printf '==HEALTH==\n==UPTIME==\n'
+cat /proc/uptime 2>/dev/null
+printf '==LOADAVG==\n'
+cat /proc/loadavg 2>/dev/null
+printf '==MEMINFO==\n'
+grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo 2>/dev/null
 """
 
 LEASES_CMD = "cat /tmp/dhcp.leases 2>/dev/null"
@@ -119,6 +125,37 @@ def _safe_json(s):
         return {}
 
 
+def _parse_health(text):
+    """Parse the ==HEALTH== section into uptime/load/memory numbers.
+    Returns None if the section is missing entirely (e.g. SSH failed)."""
+    if "==HEALTH==" not in text:
+        return None
+    h, mem, mode = {}, {}, None
+    for line in text.split("==HEALTH==", 1)[1].splitlines():
+        line = line.strip()
+        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO=="):
+            mode = line.strip("=")
+            continue
+        if not line:
+            continue
+        try:
+            if mode == "UPTIME":
+                h["uptime_s"] = int(float(line.split()[0]))
+            elif mode == "LOADAVG":
+                parts = line.split()
+                h["load1"], h["load5"], h["load15"] = (
+                    float(parts[0]), float(parts[1]), float(parts[2]))
+            elif mode == "MEMINFO":
+                k, v = line.split(":", 1)
+                mem[k] = int(v.split()[0])
+        except (ValueError, IndexError):
+            continue
+    if mem:
+        h["mem_total_kb"] = mem.get("MemTotal")
+        h["mem_avail_kb"] = mem.get("MemAvailable", mem.get("MemFree"))
+    return h or None
+
+
 def parse_leases(text):
     leases = {}
     for line in text.splitlines():
@@ -130,11 +167,11 @@ def parse_leases(text):
 
 
 def poll_device(device, cfg):
-    """Return (clients_list, error_str_or_None) for one AP."""
+    """Return (clients_list, health_dict_or_None, error_str_or_None) for one AP."""
     try:
         out, _ = _ssh_run(device["host"], cfg, REMOTE_CMD)
     except Exception as e:  # noqa: BLE001 - report any SSH/connection failure
-        return [], f"{type(e).__name__}: {e}"
+        return [], None, f"{type(e).__name__}: {e}"
 
     clients = []
     for dev, info, assoc in _parse_blocks(out):
@@ -161,7 +198,7 @@ def poll_device(device, cfg):
                 "rx_mbps": round(rx.get("rate", 0) / 1000) if rx.get("rate") else None,
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
-    return clients, None
+    return clients, _parse_health(out), None
 
 
 def _dedupe(clients):
@@ -198,12 +235,13 @@ def poll_all(cfg):
     raw_clients = []
     device_status = []
     for device in cfg["devices"]:
-        clients, err = poll_device(device, cfg)
+        clients, health, err = poll_device(device, cfg)
         device_status.append({
             "name": device["name"],
             "host": device["host"],
             "online": err is None,
             "error": err,
+            "health": health,
             "client_count": 0,  # filled in after de-duplication below
         })
         for c in clients:
