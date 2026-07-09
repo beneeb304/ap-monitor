@@ -31,6 +31,14 @@ def init(path):
                 from_ap TEXT, to_ap TEXT, band TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_roam_ts ON roam_events(ts);
+            CREATE INDEX IF NOT EXISTS idx_roam_mac_ts ON roam_events(mac, ts);
+
+            CREATE TABLE IF NOT EXISTS flapping_events (
+                ts INTEGER NOT NULL, mac TEXT NOT NULL, hostname TEXT,
+                ap TEXT, roam_count INTEGER, window_minutes INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_flapping_ts ON flapping_events(ts);
+            CREATE INDEX IF NOT EXISTS idx_flapping_mac_ts ON flapping_events(mac, ts);
 
             CREATE TABLE IF NOT EXISTS new_device_events (
                 ts INTEGER NOT NULL, mac TEXT NOT NULL, hostname TEXT, vendor TEXT
@@ -86,7 +94,8 @@ def init(path):
                 pass  # column already exists
 
 
-def record(path, snap, retention_days, sample_interval):
+def record(path, snap, retention_days, sample_interval,
+           flapping_threshold=4, flapping_window_minutes=10):
     """Persist one snapshot. Returns list of new events (roam + new-device)."""
     global _last_sample_ts
     ts = int(snap["updated"])
@@ -118,6 +127,34 @@ def record(path, snap, retention_days, sample_interval):
                     (ts, mac, ev["hostname"], old_ap, c["ap"], ev["band"]),
                 )
                 new_events.append(ev)
+
+                # --- flapping detection: N+ roams within a rolling window ---
+                # A client bouncing between APs every few seconds indicates
+                # channel overlap or a sick radio, distinct from normal
+                # roaming (walking around with a laptop). Cooldown: don't
+                # re-fire every subsequent roam once over threshold — only
+                # once per window per mac, so a sustained storm gets one
+                # alert per episode, not one per roam.
+                window_start = ts - flapping_window_minutes * 60
+                roam_count = conn.execute(
+                    "SELECT COUNT(*) FROM roam_events WHERE mac=? AND ts >= ?",
+                    (mac, window_start),
+                ).fetchone()[0]
+                if roam_count >= flapping_threshold:
+                    last_flap = conn.execute(
+                        "SELECT MAX(ts) FROM flapping_events WHERE mac=?", (mac,)
+                    ).fetchone()[0]
+                    if last_flap is None or last_flap < window_start:
+                        conn.execute(
+                            "INSERT INTO flapping_events (ts,mac,hostname,ap,roam_count,"
+                            "window_minutes) VALUES (?,?,?,?,?,?)",
+                            (ts, mac, ev["hostname"], c["ap"], roam_count,
+                             flapping_window_minutes),
+                        )
+                        new_events.append({"ts": ts, "kind": "flapping", "mac": mac,
+                                           "hostname": ev["hostname"], "ap": c["ap"],
+                                           "roam_count": roam_count,
+                                           "window_minutes": flapping_window_minutes})
 
             # --- new-device detection (skip the very first seeding run) ---
             seen = conn.execute(
@@ -188,6 +225,7 @@ def record(path, snap, retention_days, sample_interval):
         cutoff = ts - retention_days * 86400
         conn.execute("DELETE FROM ap_counts WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM roam_events WHERE ts < ?", (cutoff,))
+        conn.execute("DELETE FROM flapping_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM new_device_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM ap_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_samples WHERE ts < ?", (cutoff,))
@@ -302,6 +340,10 @@ def events(path, limit=100):
             "UNION ALL "
             "SELECT ts, CASE online WHEN 1 THEN 'ap_online' ELSE 'ap_offline' END, "
             "NULL, NULL, NULL, NULL, NULL, NULL, ap, error FROM ap_events "
+            "UNION ALL "
+            "SELECT ts, 'flapping' AS kind, mac, hostname, NULL, NULL, NULL, NULL, ap, "
+            "(roam_count || ' roams in ' || window_minutes || 'm') AS error "
+            "FROM flapping_events "
             "ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()

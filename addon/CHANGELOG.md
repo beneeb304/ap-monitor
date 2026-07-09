@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0
+
+- Roam-storm / flapping detection: a `flapping` event fires when a client
+  roams `flapping_threshold`+ times (default 4) within a rolling
+  `flapping_window_minutes` window (default 10) — one event per episode,
+  not one per roam. Shown in the dashboard's events feed with an orange
+  "FLAPPING" badge, and published to `ap_monitor/events/flapping` for HA
+  automations. Configurable via `flapping_threshold` /
+  `flapping_window_minutes` in config.yaml.
+
 ## 1.8.0
 
 - Detect `rpcd`/iwinfo crashed vs. a genuinely quiet AP: previously, if

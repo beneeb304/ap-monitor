@@ -47,6 +47,7 @@
   .event .t { color: #8a93a3; font-size: 11px; }
   .event .arrow { color: #ffc857; }
   .badge-new { background: #14502b; color: #6df0a0; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+  .badge-flap { background: #5a3a14; color: #ffb86d; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
   mark { background: #5a4a00; color: #fff; border-radius: 3px; }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 50; }
   .overlay.show { display: flex; }
@@ -199,6 +200,10 @@ async function refreshEvents(){
     : e.kind==="new"
     ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
          <span class="badge-new">NEW</span> <b>${esc(e.hostname||e.mac)}</b> <span class="muted">${esc(e.vendor||'')}</span></div>`
+    : e.kind==="flapping"
+    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+         <span class="badge-flap">FLAPPING</span> <b>${esc(e.hostname||e.mac)}</b>
+         <span class="muted">${esc(e.error||'')} · now on ${esc(e.ap)}</span></div>`
     : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
          <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)} <span class="muted">${esc(e.band)}</span></div>`
   ).join("") : '<span class="muted">None yet.</span>';

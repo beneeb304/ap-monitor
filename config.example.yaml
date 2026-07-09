@@ -49,6 +49,14 @@ sample_interval: 30       # seconds between per-client signal samples (drill-dow
 # With poll_interval: 5 the default 3 means ~15 s before an outage alert.
 offline_threshold: 3
 
+# Roam-storm / flapping detection: a client bouncing between APs indicates
+# channel overlap or a sick radio, distinct from normal roaming (walking
+# around with a laptop). Emits one `flapping` event per episode (not one per
+# roam) when a MAC roams >= flapping_threshold times within a rolling
+# flapping_window_minutes window.
+flapping_threshold: 4
+flapping_window_minutes: 10
+
 # Optional: publish AP status to an MQTT broker with Home Assistant discovery.
 # Each AP shows up in HA as a connectivity binary_sensor + client-count sensor,
 # so a phone notification when an AP drops is a one-line HA automation.

@@ -34,6 +34,10 @@ OFFLINE_THRESHOLD = CFG.get("offline_threshold", 3)
 # just the one queried — taking down client/signal monitoring for a poll
 # cycle until procd respawns it. See README "Interpreting health metrics".
 CHANNEL_UTILIZATION = bool(CFG.get("channel_utilization", False))
+# Roam-storm detection: a client bouncing between APs indicates channel
+# overlap or a sick radio, distinct from normal roaming.
+FLAPPING_THRESHOLD = CFG.get("flapping_threshold", 4)
+FLAPPING_WINDOW_MINUTES = CFG.get("flapping_window_minutes", 10)
 
 app = Flask(__name__, static_folder=None)
 
@@ -58,7 +62,8 @@ def poll_loop():
                 fails = 0 if d["online"] else fail_counts.get(d["name"], 0) + 1
                 fail_counts[d["name"]] = fails
                 d["online"] = fails < OFFLINE_THRESHOLD
-            events = db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL)
+            events = db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL,
+                              FLAPPING_THRESHOLD, FLAPPING_WINDOW_MINUTES)
             events += db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
             if mqtt_pub:
                 mqtt_pub.publish(snap["devices"])

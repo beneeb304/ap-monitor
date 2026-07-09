@@ -39,6 +39,8 @@ sample_interval: 30
 offline_threshold: 3                     # failed polls before an AP counts as offline
 temp_unit: F                             # dashboard temp display: C (default) or F
 channel_utilization: false               # opt-in; see caveat below before enabling
+flapping_threshold: 4                    # roams within the window that trigger a flapping event
+flapping_window_minutes: 10              # rolling window for flapping_threshold
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router
@@ -107,6 +109,9 @@ Every event is also published as JSON to a per-kind MQTT topic (not retained):
 - `ap_monitor/events/roam` — client moved between APs
 - `ap_monitor/events/ap_offline` / `ap_monitor/events/ap_online`
 - `ap_monitor/events/ap_reboot` — an AP's uptime went backwards (silent reboot)
+- `ap_monitor/events/flapping` — a client roamed `flapping_threshold`+ times
+  within `flapping_window_minutes` (default 4 in 10 min); one event per
+  episode, not one per roam. Usually means channel overlap or a sick radio.
 
 Example automation — notify when a genuinely new device joins:
 
