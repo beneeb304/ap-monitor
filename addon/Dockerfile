@@ -10,6 +10,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
+# Cache-bust the clone: ADD of a URL is re-fetched on every build, so this
+# layer (and everything after it) invalidates whenever the branch moves.
+# Without it, Docker layer caching can reuse a stale clone from a previous
+# build and ship old code under a new version number.
+ADD https://api.github.com/repos/beneeb304/ap-monitor/git/refs/heads/main /tmp/git-ref.json
 RUN git clone --depth 1 --branch "${REF}" "${REPO}" /app
 WORKDIR /app
 RUN pip install --no-cache-dir -r requirements.txt
