@@ -225,6 +225,14 @@ async function refreshEvents(){
     ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
          <span class="badge-flap">FLAPPING</span> <b>${esc(e.hostname||e.mac)}</b>
          <span class="muted">${esc(e.error||'')} · now on ${esc(e.ap)}</span></div>`
+    : e.kind==="channel_overlap"
+    ? `<div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+         <span class="badge-flap">CH OVERLAP</span> <b>${esc(e.ap)}</b>
+         <span class="muted">${esc(e.band)} · ${esc(e.error||'')}</span></div>`
+    : e.kind==="channel_clear"
+    ? `<div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+         <b style="color:#51cf66">Channel overlap cleared</b> <b>${esc(e.ap)}</b>
+         <span class="muted">${esc(e.band)}</span></div>`
     : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
          <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)} <span class="muted">${esc(e.band)}</span></div>`
   ).join("") : '<span class="muted">None yet.</span>';
@@ -301,6 +309,7 @@ async function refreshHealth(){
         <div class="cell"><div class="k">Load (1m)</div><div class="v">${s.load1[last]!=null?s.load1[last]:'—'}</div></div>
         <div class="cell"><div class="k">Memory used</div><div class="v">${s.mem_used_pct[last]!=null?s.mem_used_pct[last]+'%':'—'}</div></div>
         <div class="cell"><div class="k">Temp</div><div class="v">${s.temp[last]!=null?s.temp[last]+degLbl:'—'}</div></div>
+        <div class="cell"><div class="k">Channel 2.4/5 GHz</div><div class="v">${s.channel_24[last]!=null?s.channel_24[last]:'—'} / ${s.channel_5[last]!=null?s.channel_5[last]:'—'}</div></div>
         <div class="cell"><div class="k">Noise 2.4/5 GHz</div><div class="v">${s.noise_24[last]!=null?s.noise_24[last]:'—'} / ${s.noise_5[last]!=null?s.noise_5[last]:'—'} dBm</div></div>
         <div class="cell"><div class="k">Busy 2.4/5 GHz</div><div class="v">${s.util_24[last]!=null?s.util_24[last]+'%':'—'} / ${s.util_5[last]!=null?s.util_5[last]+'%':'—'}</div></div>
         <div class="cell"><div class="k">Overlay used</div><div class="v">${s.overlay_used_pct[last]!=null?s.overlay_used_pct[last]+'% ('+s.overlay_avail_mb[last]+' MB free)':'—'}</div></div>

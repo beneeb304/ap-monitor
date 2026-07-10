@@ -171,6 +171,87 @@ def test_ap_status_transition_emits_event(db_path):
     assert len(ev) == 1 and ev[0]["kind"] == "ap_offline"
 
 
+# --- channel-overlap detection ---------------------------------------------
+# 2.4 GHz channels are 5 MHz apart but ~22 MHz wide, so anything within 4
+# channel numbers overlaps -- 1/6/11 (5 apart) is the classic non-overlapping
+# set. Stateful like AP up/down: fires only on the transition into/out of
+# overlap, not every poll while a misconfiguration persists.
+
+@pytest.mark.parametrize("ch1,ch2,expected", [
+    (6, 6, True),      # identical (co-channel)
+    (6, 9, True),      # 3 apart: overlaps
+    (1, 5, True),      # 4 apart: still overlaps
+    (1, 6, False),     # 5 apart: the classic non-overlapping pairing
+    (1, 11, False),    # far apart
+    (6, None, False),  # one band has no Master-mode radio -> not comparable
+    (None, None, False),
+])
+def test_channels_overlap_math(ch1, ch2, expected):
+    assert db._channels_overlap(ch1, ch2) is expected
+
+
+def test_channel_overlap_fires_once_on_transition(db_path):
+    ev = db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys3": 4})
+    assert len(ev) == 1
+    e = ev[0]
+    assert e["kind"] == "channel_overlap"
+    assert {e["ap1"], e["ap2"]} == {"Flint2", "Linksys3"}
+    assert e["band"] == "2.4 GHz"
+    assert {e["channel1"], e["channel2"]} == {6, 4}
+
+    # Persisting overlap on the next poll must NOT re-fire.
+    ev2 = db.check_channel_overlaps(db_path, 1010, {"Flint2": 6, "Linksys3": 4})
+    assert ev2 == []
+
+
+def test_channel_overlap_clears_when_channel_changes(db_path):
+    db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys3": 4})
+    ev = db.check_channel_overlaps(db_path, 1100, {"Flint2": 6, "Linksys3": 11})
+    assert len(ev) == 1
+    assert ev[0]["kind"] == "channel_clear"
+    assert {ev[0]["ap1"], ev[0]["ap2"]} == {"Flint2", "Linksys3"}
+
+
+def test_channel_overlap_no_overlap_no_events(db_path):
+    ev = db.check_channel_overlaps(db_path, 1000, {"Flint2": 1, "Linksys3": 6, "Linksys2": 11})
+    assert ev == []
+
+
+def test_channel_overlap_missing_channel_ignored(db_path):
+    """An AP with no Master-mode radio reporting (e.g. rpcd down, or a
+    5GHz-only AP) has channel=None and can't be compared."""
+    ev = db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys3": None})
+    assert ev == []
+
+
+def test_channel_overlap_multiple_aps_pairwise(db_path):
+    """3 APs, two of which overlap -- only that pair fires."""
+    ev = db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys2": 8, "Linksys3": 1})
+    assert len(ev) == 1
+    assert {ev[0]["ap1"], ev[0]["ap2"]} == {"Flint2", "Linksys2"}
+
+
+def test_channel_overlap_retention(db_path):
+    db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys3": 4})
+    assert any(e["kind"] == "channel_overlap" for e in db.events(db_path, limit=50))
+    # A cutoff far in the future purges channel_overlap_events like other event tables.
+    db.record(db_path, {"updated": 1000 + 999999999, "clients": [], "devices": []},
+             retention_days=0, sample_interval=30)
+    assert not any(e["kind"] == "channel_overlap" for e in db.events(db_path, limit=50))
+
+
+def test_channel_overlap_events_feed_merge(db_path):
+    # ap1/ap2 (and so channel1/channel2) are sorted alphabetically by AP name
+    # inside check_channel_overlaps, so this ordering is deterministic, not
+    # just "one of two possibilities".
+    db.check_channel_overlaps(db_path, 1000, {"Flint2": 6, "Linksys3": 4})
+    feed = db.events(db_path, limit=50)
+    row = next(e for e in feed if e["kind"] == "channel_overlap")
+    assert row["ap"] == "Flint2 + Linksys3"
+    assert row["band"] == "2.4 GHz"
+    assert row["error"] == "ch6 / ch4"
+
+
 def _health_snap(ts, uptime):
     return {"updated": ts, "clients": [], "devices": [
         {"name": "Flint2", "client_count": 0,
@@ -208,13 +289,14 @@ def test_health_series_uptime_load_memory(db_path):
     assert s["mem_used_pct"] == [50.0, 50.0]
 
 
-def test_health_series_temp_noise_util_overlay(db_path):
+def test_health_series_temp_noise_util_overlay_channel(db_path):
     snap = {"updated": 1000, "clients": [], "devices": [
         {"name": "Flint2", "client_count": 0,
          "health": {"uptime_s": 600, "load1": 0.5, "mem_total_kb": 245760,
                     "mem_avail_kb": 122880, "temp_c": 52.0, "noise_24": -92,
                     "noise_5": -103, "util_24": 42.5, "util_5": 12.0,
-                    "overlay_total_kb": 15104, "overlay_avail_kb": 12032}}]}
+                    "overlay_total_kb": 15104, "overlay_avail_kb": 12032,
+                    "channel_24": 6, "channel_5": 36}}]}
     db.record(db_path, snap, 7, 30)
     s = db.health(db_path, hours=10**6)["series"]["Flint2"]
     assert s["temp"] == [52.0]
@@ -222,6 +304,7 @@ def test_health_series_temp_noise_util_overlay(db_path):
     assert s["util_24"] == [42.5] and s["util_5"] == [12.0] and s["util_6"] == [None]
     assert s["overlay_used_pct"] == [round((1 - 12032 / 15104) * 100, 1)]
     assert s["overlay_avail_mb"] == [round(12032 / 1024, 1)]
+    assert s["channel_24"] == [6] and s["channel_5"] == [36] and s["channel_6"] == [None]
 
 
 def test_health_series_ap_without_overlay_data_is_none(db_path):

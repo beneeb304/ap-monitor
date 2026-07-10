@@ -81,16 +81,31 @@ def init(path):
                 mem_total INTEGER, mem_avail INTEGER,
                 temp REAL, noise_24 INTEGER, noise_5 INTEGER, noise_6 INTEGER,
                 util_24 REAL, util_5 REAL, util_6 REAL,
-                overlay_total INTEGER, overlay_avail INTEGER
+                overlay_total INTEGER, overlay_avail INTEGER,
+                channel_24 INTEGER, channel_5 INTEGER, channel_6 INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_ap_health ON ap_health(ap, ts);
+
+            CREATE TABLE IF NOT EXISTS channel_overlap_state (
+                ap1 TEXT NOT NULL, ap2 TEXT NOT NULL, band TEXT NOT NULL,
+                since INTEGER NOT NULL, channel1 INTEGER, channel2 INTEGER,
+                PRIMARY KEY (ap1, ap2, band)
+            );
+
+            CREATE TABLE IF NOT EXISTS channel_overlap_events (
+                ts INTEGER NOT NULL, ap1 TEXT NOT NULL, ap2 TEXT NOT NULL,
+                band TEXT NOT NULL, channel1 INTEGER, channel2 INTEGER,
+                overlapping INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_channel_overlap_ts ON channel_overlap_events(ts);
             """
         )
-        # Migrate ap_health tables created before temp/noise/utilization/overlay existed.
+        # Migrate ap_health tables created before temp/noise/utilization/overlay/channel existed.
         for col, typ in (("temp", "REAL"), ("noise_24", "INTEGER"),
                          ("noise_5", "INTEGER"), ("noise_6", "INTEGER"),
                          ("util_24", "REAL"), ("util_5", "REAL"), ("util_6", "REAL"),
-                         ("overlay_total", "INTEGER"), ("overlay_avail", "INTEGER")):
+                         ("overlay_total", "INTEGER"), ("overlay_avail", "INTEGER"),
+                         ("channel_24", "INTEGER"), ("channel_5", "INTEGER"), ("channel_6", "INTEGER")):
             try:
                 conn.execute(f"ALTER TABLE ap_health ADD COLUMN {col} {typ}")
             except sqlite3.OperationalError:
@@ -230,13 +245,14 @@ def record(path, snap, retention_days, sample_interval,
                 conn.execute(
                     "INSERT INTO ap_health (ts,ap,uptime,load1,load5,load15,mem_total,mem_avail,"
                     "temp,noise_24,noise_5,noise_6,util_24,util_5,util_6,"
-                    "overlay_total,overlay_avail) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "overlay_total,overlay_avail,channel_24,channel_5,channel_6) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (ts, d["name"], up, h.get("load1"), h.get("load5"), h.get("load15"),
                      h.get("mem_total_kb"), h.get("mem_avail_kb"), h.get("temp_c"),
                      h.get("noise_24"), h.get("noise_5"), h.get("noise_6"),
                      h.get("util_24"), h.get("util_5"), h.get("util_6"),
-                     h.get("overlay_total_kb"), h.get("overlay_avail_kb")),
+                     h.get("overlay_total_kb"), h.get("overlay_avail_kb"),
+                     h.get("channel_24"), h.get("channel_5"), h.get("channel_6")),
                 )
 
         if write_samples:
@@ -250,6 +266,7 @@ def record(path, snap, retention_days, sample_interval,
         conn.execute("DELETE FROM ap_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_samples WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM ap_health WHERE ts < ?", (cutoff,))
+        conn.execute("DELETE FROM channel_overlap_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_loc WHERE last_ts < ?", (cutoff,))
     return new_events
 
@@ -279,6 +296,66 @@ def record_ap_status(path, ts, statuses):
                 )
                 new_events.append({"ts": ts, "kind": "ap_online" if online else "ap_offline",
                                    "ap": ap, "error": error or ""})
+    return new_events
+
+
+def _channels_overlap(ch1, ch2):
+    """2.4 GHz channels are 5 MHz apart but ~22 MHz wide, so anything within
+    4 channel numbers of each other overlaps -- 1/6/11 (5 apart) is the
+    classic non-overlapping set. Not applicable to 5/6 GHz, which have much
+    wider, regulator-enforced spacing."""
+    if ch1 is None or ch2 is None:
+        return False
+    return abs(ch1 - ch2) < 5
+
+
+def check_channel_overlaps(path, ts, channels_24):
+    """Detect 2.4 GHz channel overlap between AP pairs. `channels_24` is
+    {ap_name: channel_or_None}. Stateful like record_ap_status: an event
+    fires only on the transition into or out of overlap, not on every poll
+    while a misconfiguration persists. Returns new events (for feed/MQTT)."""
+    aps = sorted(ap for ap, ch in channels_24.items() if ch is not None)
+    current = {}
+    for i, ap1 in enumerate(aps):
+        for ap2 in aps[i + 1:]:
+            if _channels_overlap(channels_24[ap1], channels_24[ap2]):
+                current[(ap1, ap2)] = (channels_24[ap1], channels_24[ap2])
+
+    new_events = []
+    with _write_lock, _connect(path) as conn:
+        prev_pairs = {(r["ap1"], r["ap2"]) for r in
+                     conn.execute("SELECT ap1, ap2 FROM channel_overlap_state WHERE band='2.4 GHz'")}
+
+        for pair, (ch1, ch2) in current.items():
+            if pair in prev_pairs:
+                continue
+            ap1, ap2 = pair
+            conn.execute(
+                "INSERT INTO channel_overlap_state (ap1,ap2,band,since,channel1,channel2) "
+                "VALUES (?,?,?,?,?,?)",
+                (ap1, ap2, "2.4 GHz", ts, ch1, ch2),
+            )
+            conn.execute(
+                "INSERT INTO channel_overlap_events (ts,ap1,ap2,band,channel1,channel2,overlapping) "
+                "VALUES (?,?,?,?,?,?,1)",
+                (ts, ap1, ap2, "2.4 GHz", ch1, ch2),
+            )
+            new_events.append({"ts": ts, "kind": "channel_overlap", "ap1": ap1, "ap2": ap2,
+                               "band": "2.4 GHz", "channel1": ch1, "channel2": ch2})
+
+        for pair in prev_pairs - set(current):
+            ap1, ap2 = pair
+            conn.execute(
+                "DELETE FROM channel_overlap_state WHERE ap1=? AND ap2=? AND band='2.4 GHz'",
+                (ap1, ap2),
+            )
+            conn.execute(
+                "INSERT INTO channel_overlap_events (ts,ap1,ap2,band,channel1,channel2,overlapping) "
+                "VALUES (?,?,?,?,NULL,NULL,0)",
+                (ts, ap1, ap2, "2.4 GHz"),
+            )
+            new_events.append({"ts": ts, "kind": "channel_clear", "ap1": ap1, "ap2": ap2,
+                               "band": "2.4 GHz"})
     return new_events
 
 
@@ -374,7 +451,7 @@ def health(path, hours):
         rows = conn.execute(
             "SELECT ts, ap, uptime, load1, mem_total, mem_avail, temp, "
             "noise_24, noise_5, noise_6, util_24, util_5, util_6, "
-            "overlay_total, overlay_avail FROM ap_health "
+            "overlay_total, overlay_avail, channel_24, channel_5, channel_6 FROM ap_health "
             "WHERE ts >= ? ORDER BY ts",
             (start,),
         ).fetchall()
@@ -386,7 +463,8 @@ def health(path, hours):
             series[ap] = {"ts": [], "uptime": [], "load1": [], "mem_used_pct": [],
                           "temp": [], "noise_24": [], "noise_5": [], "noise_6": [],
                           "util_24": [], "util_5": [], "util_6": [],
-                          "overlay_used_pct": [], "overlay_avail_mb": []}
+                          "overlay_used_pct": [], "overlay_avail_mb": [],
+                          "channel_24": [], "channel_5": [], "channel_6": []}
         s = series[ap]
         s["ts"].append(r["ts"])
         s["uptime"].append(r["uptime"])
@@ -408,6 +486,9 @@ def health(path, hours):
             ov_avail_mb = round(r["overlay_avail"] / 1024, 1)
         s["overlay_used_pct"].append(ov_pct)
         s["overlay_avail_mb"].append(ov_avail_mb)
+        s["channel_24"].append(r["channel_24"])
+        s["channel_5"].append(r["channel_5"])
+        s["channel_6"].append(r["channel_6"])
     return {"aps": aps, "series": series}
 
 
@@ -427,6 +508,11 @@ def events(path, limit=100):
             "SELECT ts, 'flapping' AS kind, mac, hostname, NULL, NULL, NULL, NULL, ap, "
             "(roam_count || ' roams in ' || window_minutes || 'm') AS error "
             "FROM flapping_events "
+            "UNION ALL "
+            "SELECT ts, CASE overlapping WHEN 1 THEN 'channel_overlap' ELSE 'channel_clear' END, "
+            "NULL, NULL, NULL, NULL, band, NULL, (ap1 || ' + ' || ap2), "
+            "CASE overlapping WHEN 1 THEN ('ch' || channel1 || ' / ch' || channel2) ELSE NULL END "
+            "FROM channel_overlap_events "
             "ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()

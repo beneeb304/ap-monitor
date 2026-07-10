@@ -71,6 +71,16 @@ def test_discovery_overlay_sensor_is_unconditional():
     assert any("ap_monitor_flint2/overlay_used_pct/config" in t for t in pub._client.topics())
 
 
+def test_discovery_channel_sensors_are_unconditional():
+    """Channel is captured over the existing SSH session, same as overlay --
+    no crash risk, so it's always advertised regardless of config."""
+    pub = _make_pub(channel_utilization=False)
+    pub._publish_discovery()
+    topics = pub._client.topics()
+    assert any("ap_monitor_flint2/channel_24/config" in t for t in topics)
+    assert any("ap_monitor_flint2/channel_5/config" in t for t in topics)
+
+
 def test_discovery_all_configs_are_valid_json_or_empty():
     pub = _make_pub(channel_utilization=True)
     pub._publish_discovery()
@@ -126,6 +136,14 @@ def test_publish_overlay_used_pct():
                  "health": {"overlay_total_kb": 15104, "overlay_avail_kb": 12032}}])
     expected = str(round((1 - 12032 / 15104) * 100, 1))
     assert pub._client.payload_for("ap_monitor/flint2/overlay_used_pct") == expected
+
+
+def test_publish_channel_fields():
+    pub = _make_pub(channel_utilization=False)
+    pub.publish([{"name": "Flint2", "online": True, "client_count": 1,
+                 "health": {"channel_24": 6, "channel_5": 36}}])
+    assert pub._client.payload_for("ap_monitor/flint2/channel_24") == "6"
+    assert pub._client.payload_for("ap_monitor/flint2/channel_5") == "36"
 
 
 def test_publish_util_fields():

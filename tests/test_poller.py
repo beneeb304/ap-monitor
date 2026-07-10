@@ -126,6 +126,75 @@ def test_util_pct_delta_math():
     assert poller._util_pct(key, {"mhz": 2437}) is None  # driver without counters
 
 
+# --- per-AP broadcast channel capture (for channel-overlap detection) ------
+# Master-mode only: a client-mode/backhaul radio (apcli0 etc.) reports the
+# channel of its upstream AP, not this device's own -- including it would
+# misattribute channels on mesh/repeater setups.
+
+def test_poll_device_captures_master_mode_channel(monkeypatch):
+    out = """==DEV ra0==
+{"ssid":"home","frequency":2437,"channel":6,"mode":"Master"}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==HEALTH==
+==UPTIME==
+1000 2000
+"""
+    monkeypatch.setattr(poller, "_ssh_run", lambda host, cfg, cmd: (out, ""))
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert err is None
+    assert health["channel_24"] == 6
+
+
+def test_poll_device_ignores_client_mode_channel(monkeypatch):
+    """A client-mode backhaul radio's channel must not be attributed as this
+    AP's own broadcast channel."""
+    out = """==DEV apcli0==
+{"ssid":"upstream","frequency":2462,"channel":11,"mode":"Client"}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==HEALTH==
+==UPTIME==
+1000 2000
+"""
+    monkeypatch.setattr(poller, "_ssh_run", lambda host, cfg, cmd: (out, ""))
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert err is None
+    assert "channel_24" not in health
+
+
+def test_poll_device_captures_channel_per_band(monkeypatch):
+    out = """==DEV ra0==
+{"ssid":"home","frequency":2437,"channel":6,"mode":"Master"}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==DEV ra1==
+{"ssid":"home5","frequency":5180,"channel":36,"mode":"Master"}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==HEALTH==
+==UPTIME==
+1000 2000
+"""
+    monkeypatch.setattr(poller, "_ssh_run", lambda host, cfg, cmd: (out, ""))
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert err is None
+    assert health["channel_24"] == 6
+    assert health["channel_5"] == 36
+
+
 # --- rpcd/iwinfo-down detection ---------------------------------------------
 # Reproduced in production: rpcd can crash on a GL.iNet Flint 2's MediaTek
 # driver while SSH stays fully up. Without this detection that silently

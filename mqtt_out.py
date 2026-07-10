@@ -98,6 +98,10 @@ class Publisher:
                                                       "unit_of_measurement": "%",
                                                       "icon": "mdi:harddisk",
                                                       "entity_category": "diagnostic"}),
+                ("channel_24", "Channel 2.4 GHz", {"icon": "mdi:access-point",
+                                                   "entity_category": "diagnostic"}),
+                ("channel_5", "Channel 5 GHz", {"icon": "mdi:access-point",
+                                                "entity_category": "diagnostic"}),
             ]
             if self._channel_utilization:
                 sensors += [
@@ -155,7 +159,8 @@ class Publisher:
                     pct = round((1 - h["overlay_avail_kb"] / h["overlay_total_kb"]) * 100, 1)
                     self._client.publish(f"{self._base}/{slug}/overlay_used_pct",
                                          str(pct), retain=True)
-                for band_key in ("noise_24", "noise_5", "util_24", "util_5"):
+                for band_key in ("noise_24", "noise_5", "util_24", "util_5",
+                                "channel_24", "channel_5"):
                     if h.get(band_key) is not None:
                         self._client.publish(f"{self._base}/{slug}/{band_key}",
                                              str(h[band_key]), retain=True)

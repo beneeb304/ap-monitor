@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.16.0
+
+- Channel-overlap warning: flags when two APs' 2.4 GHz radios sit on the
+  same or overlapping channel (only 1/6/11 are truly non-overlapping in
+  20MHz channels) — a classic cause of the roam-storm/flapping behavior
+  this add-on already detects. Fires `channel_overlap` when it starts and
+  `channel_clear` when it's fixed (not a repeat every poll), shown as a
+  dashboard badge and published to `ap_monitor/events/channel_overlap` /
+  `.../channel_clear`. Always on — computed from each AP's own broadcast
+  channel, already collected over the existing SSH session, no extra
+  polling or config. New "Channel 2.4/5 GHz" tile on the Health tab, and
+  `sensor.<ap>_channel_2_4_ghz` / `_5_ghz` HA sensors.
+
 ## 1.15.0
 
 - Optional HTTP Basic Auth for the dashboard. Set `dashboard_username` and

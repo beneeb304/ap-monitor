@@ -257,7 +257,7 @@ def poll_device(device, cfg, include_survey=True):
                             "try: /etc/init.d/rpcd restart on the AP")
 
     clients = []
-    noise_by_band, util_by_band = {}, {}
+    noise_by_band, util_by_band, channel_by_band = {}, {}, {}
     band_key = {"2.4 GHz": "24", "5 GHz": "5", "6 GHz": "6"}
     for dev, info, assoc, survey in blocks:
         ssid = info.get("ssid", "")
@@ -265,6 +265,13 @@ def poll_device(device, cfg, include_survey=True):
         band = band_from_freq(freq)
         bk = band_key.get(band)
         channel = info.get("channel")
+        # This AP's own broadcast channel, for channel-overlap detection
+        # between neighboring APs. Master-mode only: a client-mode/backhaul
+        # radio (apcli0 etc.) reports the channel of its upstream AP, not
+        # this device's own — including it would misattribute channels on
+        # mesh/repeater setups.
+        if channel and bk and info.get("mode") == "Master":
+            channel_by_band[f"channel_{bk}"] = channel
         # Radio noise floor (dBm); 0/None means the driver doesn't report it.
         # Keep the worst (highest) value if two radios share a band.
         n = info.get("noise")
@@ -298,8 +305,8 @@ def poll_device(device, cfg, include_survey=True):
                 "rx_mbps": round(rx.get("rate", 0) / 1000) if rx.get("rate") else None,
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
-    if noise_by_band or util_by_band:
-        health = {**(health or {}), **noise_by_band, **util_by_band}
+    if noise_by_band or util_by_band or channel_by_band:
+        health = {**(health or {}), **noise_by_band, **util_by_band, **channel_by_band}
     return clients, health, None
 
 

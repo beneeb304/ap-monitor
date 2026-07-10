@@ -131,7 +131,7 @@ installed), each AP is auto-discovered as a device with:
 - `sensor.<ap>_clients` (current client count)
 - `sensor.<ap>_uptime`, `sensor.<ap>_load_1m`, `sensor.<ap>_memory_used`,
   `sensor.<ap>_temperature`, `sensor.<ap>_noise_2_4_ghz`, `sensor.<ap>_noise_5_ghz`,
-  `sensor.<ap>_overlay_used`
+  `sensor.<ap>_overlay_used`, `sensor.<ap>_channel_2_4_ghz`, `sensor.<ap>_channel_5_ghz`
   (health metrics; also charted in the dashboard's **Health** tab)
 - `sensor.<ap>_channel_busy_2_4_ghz`, `sensor.<ap>_channel_busy_5_ghz` — only
   created if `channel_utilization: true` (see caveat above)
@@ -175,6 +175,10 @@ Every event is also published as JSON to a per-kind MQTT topic (not retained):
 - `ap_monitor/events/flapping` — a client roamed `flapping_threshold`+ times
   within `flapping_window_minutes` (default 4 in 10 min); one event per
   episode, not one per roam. Usually means channel overlap or a sick radio.
+- `ap_monitor/events/channel_overlap` / `ap_monitor/events/channel_clear` —
+  two APs' 2.4 GHz radios are on the same/overlapping channel (or that's
+  been fixed). Always on, no config — computed from each AP's own channel,
+  already collected over the existing SSH session.
 
 Example automation — notify when a genuinely new device joins:
 

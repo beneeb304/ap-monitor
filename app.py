@@ -100,6 +100,9 @@ def poll_loop():
             events = db.record(DB_PATH, snap, RETENTION, SAMPLE_INTERVAL,
                               FLAPPING_THRESHOLD, FLAPPING_WINDOW_MINUTES, KNOWN_MACS)
             events += db.record_ap_status(DB_PATH, int(snap["updated"]), snap["devices"])
+            channels_24 = {d["name"]: (d.get("health") or {}).get("channel_24")
+                          for d in snap["devices"]}
+            events += db.check_channel_overlaps(DB_PATH, int(snap["updated"]), channels_24)
             if mqtt_pub:
                 mqtt_pub.publish(snap["devices"])
                 mqtt_pub.publish_events(events)
