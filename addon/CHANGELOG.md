@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.15.0
+
+- Optional HTTP Basic Auth for the dashboard. Set `dashboard_username` and
+  `dashboard_password` in config.yaml (both required; off by default) to
+  require a login on every request — the API, the dashboard page, and
+  requests via HA Ingress alike. This closes the gap left by the iOS
+  home-screen bookmark, which reaches the direct port and bypasses HA's
+  own login. Auth is applied uniformly rather than exempting Ingress on
+  purpose: an "is this Ingress?" header check would be forgeable on a
+  direct LAN request. Over plain HTTP the credentials are base64-encoded
+  (casual-access protection, not traffic-capture protection); for
+  encryption, use the Ingress "Open Web UI" button (HA's own TLS).
+
 ## 1.14.0
 
 - iOS "Add to Home Screen" support: the dashboard now declares an

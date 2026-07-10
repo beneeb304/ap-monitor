@@ -58,6 +58,8 @@ ssh_timeout: 6
 ssh_key: /share/ap-monitor/ssh_key      # path inside the add-on
 listen_host: 0.0.0.0
 listen_port: 8088
+# dashboard_username: ben                # optional Basic Auth; both required
+# dashboard_password: change-me          # see "Locking down access" below
 db_file: /data/history.db               # persisted by the add-on
 retention_days: 7
 sample_interval: 30
@@ -99,6 +101,26 @@ mqtt:
 > fires a `new_untrusted` event alongside the routine `new` one. Leave it
 > empty and nothing changes from today's behavior — an incomplete list
 > would otherwise flag your own devices as "untrusted".
+
+## Locking down access
+
+By default the dashboard has **no authentication** — anyone who can reach
+`http://<home-assistant-ip>:8088` on your LAN can view every client and
+rename devices. Accessing it *through HA* (the Ingress "Open Web UI" button)
+is already gated by your Home Assistant login, but the direct port and the
+iOS home-screen bookmark are not.
+
+To require a login, set both `dashboard_username` and `dashboard_password`
+in `config.yaml`. This turns on HTTP Basic Auth for **every** request — the
+API, the dashboard page, and requests arriving via Ingress alike — so the
+home-screen bookmark will prompt for credentials the first time (browsers
+remember them afterward). Setting only one of the two leaves auth off.
+
+Caveat: over the plain-HTTP direct port, Basic Auth credentials are only
+base64-encoded, not encrypted — enough to stop casual access by others on
+your network, but not someone capturing traffic. For an encrypted path, use
+the Ingress **Open Web UI** button (served over Home Assistant's own TLS)
+rather than the raw `:8088` URL.
 
 ## AP offline alerts in Home Assistant
 

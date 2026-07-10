@@ -1,10 +1,11 @@
 """AP Monitor web app: background SSH poller + live dashboard."""
+import hmac
 import os
 import threading
 import time
 
 import yaml
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 import db
 import mqtt_out
@@ -42,8 +43,38 @@ FLAPPING_WINDOW_MINUTES = CFG.get("flapping_window_minutes", 10)
 # entirely (no new_untrusted events at all) rather than treating every new
 # device as untrusted by default.
 KNOWN_MACS = {m.strip().lower() for m in CFG.get("known_macs", []) if m and m.strip()} or None
+# Optional HTTP Basic Auth. Off unless BOTH username and password are set, so
+# it's fully backward-compatible. Applied uniformly to every request —
+# including ones arriving via HA Ingress — on purpose: the only signal that a
+# request "came through Ingress" is a header Supervisor adds, and since this
+# same process also listens on the raw LAN port, a direct request could forge
+# that header to bypass auth. Guarding everything closes that hole, at the
+# cost of one native login prompt the first time you open the dashboard
+# (browsers cache Basic Auth credentials afterward).
+DASHBOARD_USER = str(CFG.get("dashboard_username", "") or "")
+DASHBOARD_PASS = str(CFG.get("dashboard_password", "") or "")
+AUTH_ENABLED = bool(DASHBOARD_USER and DASHBOARD_PASS)
+_USER_B = DASHBOARD_USER.encode("utf-8")
+_PASS_B = DASHBOARD_PASS.encode("utf-8")
 
 app = Flask(__name__, static_folder=None)
+
+
+@app.before_request
+def _require_auth():
+    if not AUTH_ENABLED:
+        return None
+    auth = request.authorization
+    if auth is not None:
+        # Compare both fields with constant-time equality and combine
+        # without short-circuiting (& not `and`), so a wrong username can't
+        # be distinguished from a wrong password by response timing.
+        user_ok = hmac.compare_digest((auth.username or "").encode("utf-8"), _USER_B)
+        pass_ok = hmac.compare_digest((auth.password or "").encode("utf-8"), _PASS_B)
+        if user_ok & pass_ok:
+            return None
+    return Response("Authentication required.", 401,
+                    {"WWW-Authenticate": 'Basic realm="AP Monitor"'})
 
 _state = {"updated": 0, "devices": [], "clients": [], "total_clients": 0}
 _lock = threading.Lock()

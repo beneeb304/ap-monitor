@@ -17,6 +17,16 @@ ssh_key: ~/.ssh/ap_monitor
 listen_host: 0.0.0.0
 listen_port: 8088
 
+# Optional HTTP Basic Auth for the dashboard. OFF unless BOTH are set. Guards
+# every request (API + page), including via HA Ingress, so a bookmarked
+# direct URL — e.g. the iOS home-screen app, which bypasses HA's own login —
+# still requires credentials. Note: over plain HTTP the credentials are only
+# base64-encoded, so this protects against casual LAN access, not an attacker
+# capturing your network traffic. For an encrypted path, reach the dashboard
+# through HA Ingress (which uses HA's own TLS) instead of the raw port.
+# dashboard_username: ben
+# dashboard_password: change-me
+
 # Dashboard temperature unit: C (default) or F. Storage and MQTT always use
 # °C; Home Assistant converts to its own configured unit system regardless.
 # temp_unit: F
