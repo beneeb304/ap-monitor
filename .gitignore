@@ -12,6 +12,7 @@ history.db-shm
 venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # SSH keys must never be committed
 ap_monitor

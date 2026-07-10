@@ -236,3 +236,18 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 - `GET /api/outages?hours=168` — per-AP uptime % and outage list over the window, reconstructed from AP up/down events
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen
 - `POST /api/name` — set/clear a custom device name (JSON `{ "mac": "...", "name": "..." }`)
+
+## Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite runs entirely offline against ephemeral temp-directory databases —
+no real APs, network, or MQTT broker needed. It covers `poller.py`'s
+remote-output parsing (including the exact production fingerprints for the
+rpcd/iwinfo-down and channel-utilization-crash incidents), `db.py`'s event
+detection and the outage-summary reconstruction, and `mqtt_out.py`'s
+discovery/topic-routing logic. Runs automatically on every push via GitHub
+Actions (`.github/workflows/tests.yml`).

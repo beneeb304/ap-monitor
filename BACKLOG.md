@@ -2,10 +2,15 @@
 
 Sorted by value-per-effort for the current goals: AP reliability/alerting first, then network health, then security hardening.
 
-No open items — everything below has shipped or been deliberately dropped.
+## Open
+
+1. **Wifi-based presence detection for HA** — publish each named/known device as an MQTT `device_tracker` (home/away) using the existing per-client association data, so HA gets presence detection based on wifi association (faster/more reliable than the companion app's location for many cases, and works for devices without the app). Needs a "considered away after N minutes unseen" grace period since phones sleep their wifi radio and would otherwise flap home/away.
+2. **Channel-overlap warning** — the poller already collects each radio's operating channel; flag when two APs sit on the same/overlapping 2.4 GHz channel, a common cause of exactly the roam-storm/flapping behavior seen with `kingston` this session.
+3. **Direct-access auth (maybe)** — the direct port (8088) has no authentication; anyone on the LAN can view clients and rename devices via the API. Was always true, but the new iOS home-screen bookmark deliberately routes around HA's own auth, making this more relevant. Not clearly worth building speculatively — revisit if untrusted LAN users become a real scenario; document the tradeoff either way.
 
 ## Done
 
+- **Test suite + CI** — 72 pytest tests covering `poller.py` parsing (incl. the exact production fingerprints for the rpcd/iwinfo-down and channel-utilization-crash incidents), `db.py` event detection and the outage-summary reconstruction, and `mqtt_out.py` discovery/routing. Runs on every push via GitHub Actions. Verified with a mutation test (a deliberately broken outage_summary immediately failed 4 tests) and a from-scratch venv + fresh clone equivalent, not just "passes in my working directory" (2026-07).
 - **iOS home-screen app support** — apple-touch-icon + web app manifest so bookmarking the direct-access URL from Safari launches the dashboard full-screen, no browser chrome, independent of the HA app (v1.14.0, 2026-07).
 - **HA Ingress support** — fixes "Open Web UI" failing on iPhone/iPad on the same wifi network (iOS mDNS resolution of the add-on's `.local` direct-access hostname is flaky in the HA app's embedded browser); Ingress tunnels through HA's own connection instead. Kept alongside the existing direct-port access (v1.13.0, 2026-07). Follow-up fix in v1.13.1: the dashboard's fetch calls and script tag used leading-slash (domain-root-relative) URLs, which escape Ingress's path prefix and 404/error against HA's own core server — switched to `<base href="./">` + plain relative paths, verified against a simulated Ingress-prefixed deployment.
 - ~~Persist dashboard AP filter in URL hash~~ — dropped: not actually needed.

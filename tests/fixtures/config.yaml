@@ -1,0 +1,17 @@
+# Minimal valid config so app.py can be imported in tests without a real
+# config.yaml (which is git-ignored / private-network-specific).
+poll_interval: 5
+ssh_user: root
+ssh_port: 22
+ssh_timeout: 6
+ssh_key: ~/.ssh/nonexistent_test_key
+listen_host: 0.0.0.0
+listen_port: 8088
+db_file: test_history.db
+retention_days: 7
+sample_interval: 30
+offline_threshold: 3
+dhcp_source: 10.0.0.1
+devices:
+  - name: TestAP
+    host: 10.0.0.1
