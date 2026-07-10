@@ -64,3 +64,23 @@ def test_known_macs_normalized_lowercase_set(tmp_path, monkeypatch):
 def test_known_macs_empty_list_is_falsy(tmp_path, monkeypatch):
     app_module = _load_app(tmp_path, monkeypatch, {"known_macs": []})
     assert not app_module.KNOWN_MACS
+
+
+def test_presence_tracking_defaults_false(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch)
+    assert app_module.PRESENCE_TRACKING is False
+
+
+def test_presence_tracking_true_when_set(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch, {"presence_tracking": True})
+    assert app_module.PRESENCE_TRACKING is True
+
+
+def test_presence_timeout_minutes_default(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch)
+    assert app_module.PRESENCE_TIMEOUT_MINUTES == 10
+
+
+def test_presence_timeout_minutes_override(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch, {"presence_timeout_minutes": 20})
+    assert app_module.PRESENCE_TIMEOUT_MINUTES == 20

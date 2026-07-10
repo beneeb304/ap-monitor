@@ -81,6 +81,18 @@ flapping_window_minutes: 10
 #   - aa:bb:cc:dd:ee:01
 #   - aa:bb:cc:dd:ee:02
 
+# Wifi-based presence detection: opt-in, off by default, and requires the
+# `mqtt:` block below. Every device you've given a friendly name (via the
+# dashboard) is published as an HA `device_tracker` (home/away), based on
+# wifi association — often faster than phone-GPS presence, and works for
+# devices without the HA companion app. Naming a device is what "opts it
+# in"; this is a separate toggle from naming because a device_tracker can
+# trigger real automations (arrival/departure), unlike a passive sensor.
+# presence_tracking: true
+# presence_timeout_minutes: 10   # grace period (minutes) before "away" —
+#                                 phones sleep their wifi radio, so a short
+#                                 window would flap devices away/home constantly
+
 # Optional: publish AP status to an MQTT broker with Home Assistant discovery.
 # Each AP shows up in HA as a connectivity binary_sensor + client-count sensor,
 # so a phone notification when an AP drops is a one-line HA automation.

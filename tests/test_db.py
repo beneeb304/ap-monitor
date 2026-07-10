@@ -463,3 +463,81 @@ def test_outage_summary_outages_list_capped_at_10(tmp_path, monkeypatch):
     r = db.outage_summary(path, hours=1)["Flint2"]
     assert r["outage_count"] == 15
     assert len(r["outages"]) == 10  # capped, but the count itself isn't
+
+
+# --- presence detection (wifi-association-based home/away) ----------------
+# A device counts as "home" if seen within timeout_minutes, not merely
+# associated at this exact instant -- phones sleep their wifi radio, so a
+# tight window would flap a device away/home constantly. Only named devices
+# are tracked at all (naming a device is the opt-in).
+
+def _seed_named_device(path, mac, name, ts, ap="Flint2"):
+    """Establish a named, seen device: a poll where it's associated (so
+    seen_devices/client_loc get populated), then set_name()."""
+    snap = {"updated": ts, "clients": [{"mac": mac, "ap": ap, "band": "5 GHz",
+                                        "hostname": "dev", "ip": "10.0.0.1"}],
+           "devices": []}
+    db.record(path, snap, 7, 30)
+    db.set_name(path, mac, name)
+
+
+def test_presence_home_when_seen_recently(db_path, monkeypatch):
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:01", "Ben's Phone", 1000)
+    monkeypatch.setattr(time, "time", lambda: 1000 + 60)  # 1 minute later
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert r["aa:bb:cc:dd:ee:01"]["home"] is True
+    assert r["aa:bb:cc:dd:ee:01"]["name"] == "Ben's Phone"
+    assert r["aa:bb:cc:dd:ee:01"]["ap"] == "Flint2"
+
+
+def test_presence_away_after_timeout(db_path, monkeypatch):
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:01", "Ben's Phone", 1000)
+    monkeypatch.setattr(time, "time", lambda: 1000 + 20 * 60)  # 20 min later
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert r["aa:bb:cc:dd:ee:01"]["home"] is False
+
+
+def test_presence_boundary_exactly_at_timeout_is_home(db_path, monkeypatch):
+    """last_seen exactly `timeout_minutes` ago still counts as home (>=,
+    not >) -- the cutoff is inclusive."""
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:01", "Ben's Phone", 1000)
+    monkeypatch.setattr(time, "time", lambda: 1000 + 10 * 60)
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert r["aa:bb:cc:dd:ee:01"]["home"] is True
+
+
+def test_presence_unnamed_devices_excluded(db_path, monkeypatch):
+    snap = {"updated": 1000, "clients": [{"mac": "aa:bb:cc:dd:ee:99", "ap": "Flint2",
+                                          "band": "5 GHz", "hostname": "dev", "ip": "10.0.0.2"}],
+           "devices": []}
+    db.record(db_path, snap, 7, 30)  # seen, but never named
+    monkeypatch.setattr(time, "time", lambda: 1000 + 60)
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert "aa:bb:cc:dd:ee:99" not in r
+
+
+def test_presence_multiple_devices_independent(db_path, monkeypatch):
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:01", "Ben's Phone", 1000)
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:02", "Guest Laptop", 1000)
+    # Guest Laptop isn't seen again; Ben's Phone is, much later.
+    snap = {"updated": 2000, "clients": [{"mac": "aa:bb:cc:dd:ee:01", "ap": "Flint2",
+                                          "band": "5 GHz", "hostname": "dev", "ip": "10.0.0.1"}],
+           "devices": []}
+    db.record(db_path, snap, 7, 30)
+    monkeypatch.setattr(time, "time", lambda: 2000 + 60)
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert r["aa:bb:cc:dd:ee:01"]["home"] is True
+    assert r["aa:bb:cc:dd:ee:02"]["home"] is False  # last seen at 1000, now 2060 = 17.7min ago
+
+
+def test_presence_missing_client_loc_row_does_not_crash(db_path, monkeypatch):
+    """client_loc is retention-pruned by last_ts; a long-away named device
+    might have no client_loc row left at all -- ap should be None, not a
+    crash, since only last_seen (never pruned) matters for home/away."""
+    _seed_named_device(db_path, "aa:bb:cc:dd:ee:01", "Ben's Phone", 1000)
+    with db._connect(db_path) as conn:
+        conn.execute("DELETE FROM client_loc WHERE mac=?", ("aa:bb:cc:dd:ee:01",))
+    monkeypatch.setattr(time, "time", lambda: 1000 + 20 * 60)
+    r = db.presence_state(db_path, timeout_minutes=10)
+    assert r["aa:bb:cc:dd:ee:01"]["ap"] is None
+    assert r["aa:bb:cc:dd:ee:01"]["home"] is False

@@ -43,6 +43,14 @@ FLAPPING_WINDOW_MINUTES = CFG.get("flapping_window_minutes", 10)
 # entirely (no new_untrusted events at all) rather than treating every new
 # device as untrusted by default.
 KNOWN_MACS = {m.strip().lower() for m in CFG.get("known_macs", []) if m and m.strip()} or None
+# Presence detection is opt-in beyond just naming a device: an HA
+# device_tracker has real automation side effects (arrival/departure
+# triggers), unlike a passive sensor, so it deserves an explicit toggle
+# rather than silently creating entities the moment someone names a device.
+PRESENCE_TRACKING = bool(CFG.get("presence_tracking", False))
+# Phones sleep their wifi radio, so "away" needs a grace period or every
+# phone would flap away/home on every poll it happens to be dozing through.
+PRESENCE_TIMEOUT_MINUTES = CFG.get("presence_timeout_minutes", 10)
 # Optional HTTP Basic Auth. Off unless BOTH username and password are set, so
 # it's fully backward-compatible. Applied uniformly to every request —
 # including ones arriving via HA Ingress — on purpose: the only signal that a
@@ -85,6 +93,7 @@ def poll_loop():
     mqtt_pub = mqtt_out.setup(CFG)
     fail_counts = {}
     next_survey_ts = 0  # gates channel-utilization polling; see poller.REMOTE_CMD
+    next_presence_ts = 0  # gates presence publishing to the sample-interval cadence
     while True:
         try:
             now = time.time()
@@ -106,6 +115,9 @@ def poll_loop():
             if mqtt_pub:
                 mqtt_pub.publish(snap["devices"])
                 mqtt_pub.publish_events(events)
+                if PRESENCE_TRACKING and now >= next_presence_ts:
+                    next_presence_ts = now + SAMPLE_INTERVAL
+                    mqtt_pub.publish_presence(db.presence_state(DB_PATH, PRESENCE_TIMEOUT_MINUTES))
             with _lock:
                 _state.update(snap)
         except Exception as e:  # noqa: BLE001 - keep the loop alive on any failure

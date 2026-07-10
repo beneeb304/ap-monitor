@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.17.0
+
+- Wifi-based presence detection (opt-in, off by default; requires `mqtt`):
+  every named device is published as an HA `device_tracker` (home/away),
+  based on wifi association. "Home" means seen within
+  `presence_timeout_minutes` (default 10), not literally associated this
+  instant — phones sleep their wifi radio, so a tight window would flap
+  a device away/home constantly. Set `presence_tracking: true` to enable;
+  naming a device makes it *eligible*, this is the separate toggle that
+  actually turns tracking on, since a device_tracker can trigger real
+  arrival/departure automations unlike this add-on's other, passive
+  sensors. Each tracked device becomes its own HA device (not nested
+  under any AP), keyed by MAC so renaming in the dashboard updates the
+  existing entity rather than creating a new one.
+
 ## 1.16.0
 
 - Channel-overlap warning: flags when two APs' 2.4 GHz radios sit on the

@@ -165,6 +165,40 @@ class Publisher:
                         self._client.publish(f"{self._base}/{slug}/{band_key}",
                                              str(h[band_key]), retain=True)
 
+    def publish_presence(self, presence):
+        """Publish each named device as an HA device_tracker (home/away),
+        based on wifi association via db.presence_state(). Each tracked
+        device is its own HA device (not nested under an AP device, since
+        presence is about the device/person, independent of which AP it's
+        currently on). Keyed by MAC so a later rename in the dashboard
+        updates the existing entity's display name rather than creating a
+        new one."""
+        for mac, info in presence.items():
+            slug = _slug(mac)
+            device = {
+                "identifiers": [f"ap_monitor_client_{slug}"],
+                "name": info["name"],
+                "manufacturer": "AP Monitor",
+                "model": "Wifi-tracked device",
+            }
+            state_topic = f"{self._base}/presence/{slug}"
+            self._client.publish(
+                f"{self._disc}/device_tracker/ap_monitor_client_{slug}/config",
+                json.dumps({
+                    "name": None,  # None -> entity takes the device's own name
+                    "unique_id": f"ap_monitor_client_{slug}_presence",
+                    "state_topic": state_topic,
+                    "source_type": "router",
+                    "payload_home": "home",
+                    "payload_not_home": "not_home",
+                    "availability_topic": self._avail,
+                    "device": device,
+                }),
+                retain=True,
+            )
+            self._client.publish(state_topic, "home" if info["home"] else "not_home",
+                                 retain=True)
+
     def publish_events(self, events):
         """Publish each event as JSON to a per-kind topic:
         ap_monitor/events/new, .../new_random (locally-administered MACs,

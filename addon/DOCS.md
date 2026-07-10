@@ -70,6 +70,8 @@ flapping_threshold: 4                    # roams within the window that trigger 
 flapping_window_minutes: 10              # rolling window for flapping_threshold
 # known_macs:                            # opt-in unknown-device alarm; see caveat below
 #   - aa:bb:cc:dd:ee:01
+# presence_tracking: true                # opt-in wifi presence; see caveat below
+# presence_timeout_minutes: 10           # grace period before "away"
 dhcp_source: 10.0.0.1                    # your DHCP server (usually the router)
 devices:
   - name: Router
@@ -101,6 +103,18 @@ mqtt:
 > fires a `new_untrusted` event alongside the routine `new` one. Leave it
 > empty and nothing changes from today's behavior — an incomplete list
 > would otherwise flag your own devices as "untrusted".
+
+> **Presence tracking (`presence_tracking`) is opt-in, off by default, and
+> needs the `mqtt:` block.** Every device with a friendly name (set via the
+> dashboard) becomes an HA `device_tracker` (home/away), based on wifi
+> association. Naming a device is the first opt-in; this toggle is a
+> second, separate one — unlike the passive sensors elsewhere in this
+> add-on, a device_tracker can directly trigger arrival/departure
+> automations, so it shouldn't turn on silently just because you named a
+> device for the dashboard. If you don't want a *specific* named device
+> tracked (e.g. a smart plug you labeled for convenience, not a person's
+> device), leave it unnamed or use the dashboard's naming to describe only
+> the devices you do want tracked — there's no separate exclude list.
 
 ## Locking down access
 
@@ -135,6 +149,11 @@ installed), each AP is auto-discovered as a device with:
   (health metrics; also charted in the dashboard's **Health** tab)
 - `sensor.<ap>_channel_busy_2_4_ghz`, `sensor.<ap>_channel_busy_5_ghz` — only
   created if `channel_utilization: true` (see caveat above)
+
+If `presence_tracking: true` is also set, every **named** device (not tied
+to any particular AP) becomes its own HA device with one
+`device_tracker.<name>` entity (home/away), independent of the AP sensors
+above.
 
 To get a phone notification when an AP drops, add an automation:
 

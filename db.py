@@ -524,6 +524,30 @@ def get_names(path):
         return {r["mac"]: r["name"] for r in conn.execute("SELECT mac, name FROM device_names")}
 
 
+def presence_state(path, timeout_minutes):
+    """Home/away for every named device, using wifi association as the
+    presence signal: 'home' means seen within the last `timeout_minutes`,
+    not merely associated at this exact instant -- phones sleep their wifi
+    radio, so a tight window would flap a device away/home constantly.
+    seen_devices.last_seen already updates on every poll a device is
+    associated (unbounded, never retention-pruned), so no new tracking is
+    needed here; client_loc (for the current AP) IS retention-pruned, so a
+    long-away device's `ap` may be None -- that's fine, only last_seen
+    matters for the home/away decision itself."""
+    cutoff = int(time.time()) - int(timeout_minutes * 60)
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT d.mac, d.name, s.last_seen, l.ap FROM device_names d "
+            "JOIN seen_devices s ON s.mac = d.mac "
+            "LEFT JOIN client_loc l ON l.mac = d.mac"
+        ).fetchall()
+    return {
+        r["mac"]: {"name": r["name"], "home": r["last_seen"] >= cutoff,
+                  "last_seen": r["last_seen"], "ap": r["ap"]}
+        for r in rows
+    }
+
+
 def set_name(path, mac, name):
     mac = mac.lower()
     name = (name or "").strip()

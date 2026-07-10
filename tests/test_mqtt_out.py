@@ -205,3 +205,65 @@ def test_publish_events_plain_new_unaffected():
     pub.publish_events([{"kind": "new", "mac": "aa:bb:cc:00:00:01",
                         "untrusted": False, "randomized": False}])
     assert pub._client.topics() == ["ap_monitor/events/new"]
+
+
+# --- publish_presence(): device_tracker discovery + state -------------------
+
+def test_publish_presence_discovery_shape():
+    pub = _make_pub(channel_utilization=False)
+    pub.publish_presence({"aa:bb:cc:dd:ee:01": {"name": "Ben's Phone", "home": True,
+                                                "last_seen": 1000, "ap": "Flint2"}})
+    slug = "aa_bb_cc_dd_ee_01"
+    config_topic = f"homeassistant/device_tracker/ap_monitor_client_{slug}/config"
+    payload = pub._client.payload_for(config_topic)
+    assert payload is not None
+    cfg = json.loads(payload)
+    assert cfg["name"] is None  # entity takes the device's own name
+    assert cfg["source_type"] == "router"
+    assert cfg["payload_home"] == "home" and cfg["payload_not_home"] == "not_home"
+    assert cfg["device"]["name"] == "Ben's Phone"
+    # Its own HA device, not nested under any AP's device identifiers.
+    assert cfg["device"]["identifiers"] == [f"ap_monitor_client_{slug}"]
+
+
+def test_publish_presence_state_home_and_away():
+    pub = _make_pub(channel_utilization=False)
+    pub.publish_presence({
+        "aa:bb:cc:dd:ee:01": {"name": "Ben's Phone", "home": True, "last_seen": 1000, "ap": "Flint2"},
+        "aa:bb:cc:dd:ee:02": {"name": "Guest Laptop", "home": False, "last_seen": 500, "ap": None},
+    })
+    assert pub._client.payload_for("ap_monitor/presence/aa_bb_cc_dd_ee_01") == "home"
+    assert pub._client.payload_for("ap_monitor/presence/aa_bb_cc_dd_ee_02") == "not_home"
+
+
+def test_publish_presence_keyed_by_mac_not_name():
+    """Renaming a device in the dashboard must update the existing HA
+    entity's display name, not create a new one -- so the unique_id/topic
+    must derive from the (stable) MAC, not the (changeable) name."""
+    pub = _make_pub(channel_utilization=False)
+    pub.publish_presence({"aa:bb:cc:dd:ee:01": {"name": "Old Name", "home": True,
+                                                "last_seen": 1000, "ap": "Flint2"}})
+    first_unique_id = json.loads(pub._client.payload_for(
+        "homeassistant/device_tracker/ap_monitor_client_aa_bb_cc_dd_ee_01/config"))["unique_id"]
+
+    pub2 = _make_pub(channel_utilization=False)
+    pub2.publish_presence({"aa:bb:cc:dd:ee:01": {"name": "New Name", "home": True,
+                                                 "last_seen": 2000, "ap": "Flint2"}})
+    second = json.loads(pub2._client.payload_for(
+        "homeassistant/device_tracker/ap_monitor_client_aa_bb_cc_dd_ee_01/config"))
+    assert second["unique_id"] == first_unique_id
+    assert second["device"]["name"] == "New Name"
+
+
+def test_publish_presence_multiple_devices_no_crosstalk():
+    pub = _make_pub(channel_utilization=False)
+    pub.publish_presence({
+        "aa:bb:cc:dd:ee:01": {"name": "Phone A", "home": True, "last_seen": 1000, "ap": "Flint2"},
+        "aa:bb:cc:dd:ee:02": {"name": "Phone B", "home": False, "last_seen": 500, "ap": None},
+    })
+    topics = pub._client.topics()
+    assert sum(1 for t in topics if "ap_monitor_client_aa_bb_cc_dd_ee_01" in t) == 1
+    assert sum(1 for t in topics if "ap_monitor_client_aa_bb_cc_dd_ee_02" in t) == 1
+    for _, payload, _ in pub._client.published:
+        if payload and payload not in ("home", "not_home"):
+            json.loads(payload)  # every discovery config is valid JSON
