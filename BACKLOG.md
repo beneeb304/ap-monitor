@@ -9,6 +9,7 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## Needs the user's action (not a code change)
 
+- **Set the wifi Country Code on all three APs — currently `00` / "driver default"** — confirmed in the Flint2 admin UI (2026-07-10): the radio reports `Country: 00`, the conservative "world" regulatory domain. This caps transmit power and restricts the usable channel list / DFS behavior, and is likely why 5 GHz auto stays on the low UNII-1 channels (36/48). Set each radio's country code to your actual regulatory domain (e.g. US) — a quick change that unlocks the correct channels + power. **Do this first**, before any 5 GHz channel-plan work in the settings-review item above, since it changes what's even available. (Flint2's 5 GHz is confirmed 80 MHz wide, so at the current picks Linksys2 ch36 and Linksys3 ch48 share the same 80 MHz block.)
 - ~~**Linksys2 + Linksys3 co-channel on 2.4 GHz (both ch11)**~~ — resolved 2026-07-10: user pinned the three 2.4 GHz radios to a clean 1/6/11 plan (Flint2 ch6, Linksys2 ch1, Linksys3 ch11), replacing the previous "auto" mode that had let two APs land on ch11.
 
 ## Known limitations (not bugs, no fix planned)
