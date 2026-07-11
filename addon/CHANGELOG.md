@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.18.1 — diagnostics + auto-recovery for the intermittent hang
+
+The dashboard becoming unresponsive while the add-on still shows "Running"
+(the issue the 1.17.1 waitress change was meant to fix) has recurred, so
+this release does two things:
+
+- **Auto-recovery:** added a Supervisor **watchdog** health check (an HTTP
+  GET, so it detects the app actually *answering* — during the hang the TCP
+  port still accepts but no response comes back). **Enable the "Watchdog"
+  toggle on the add-on's Info page** and Supervisor will restart the add-on
+  automatically when it wedges, instead of it staying down until you notice.
+- **Diagnostics:** a `faulthandler`-based watchdog now dumps every thread's
+  stack to the add-on log if a poll cycle stalls (it can do this even when
+  the interpreter is starved, which normal logging can't). Plus a once-a-
+  minute heartbeat line showing thread count and memory, to reveal any slow
+  climb ahead of a hang. If it recurs, the log will show exactly which
+  thread is stuck — enough to root-cause and fix it properly.
+
+Investigation so far has empirically ruled out an SSH/paramiko leak, an
+MQTT client spin on a dead broker, and the SQLite connection pattern; the
+failure is a process-level stall (every request thread starved), so the
+next captured stack dump is what's needed to pinpoint it.
+
 ## 1.18.0
 
 - **Startup config validation.** The add-on now checks your config once at

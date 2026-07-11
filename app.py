@@ -1,6 +1,8 @@
 """AP Monitor web app: background SSH poller + live dashboard."""
+import faulthandler
 import hmac
 import os
+import signal
 import sys
 import threading
 import time
@@ -89,6 +91,24 @@ def _require_auth():
 _state = {"updated": 0, "devices": [], "clients": [], "total_clients": 0}
 _lock = threading.Lock()
 
+# Diagnostic watchdog window: if a single poll cycle (poll + DB writes + MQTT +
+# sleep) takes longer than this, something is wedged, so faulthandler dumps
+# every thread's stack to the log. Generous multiple of poll_interval so a
+# slow-but-healthy cycle never trips it.
+_WATCHDOG_S = max(CFG.get("poll_interval", 5) * 3, 45) + 30
+
+
+def _rss_mb():
+    """Resident memory in MB, best-effort (Linux /proc; None off-Linux)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        return None
+    return None
+
 
 def poll_loop():
     db.init(DB_PATH)
@@ -96,7 +116,18 @@ def poll_loop():
     fail_counts = {}
     next_survey_ts = 0  # gates channel-utilization polling; see poller.REMOTE_CMD
     next_presence_ts = 0  # gates presence publishing to the sample-interval cadence
+    last_heartbeat = 0.0
     while True:
+        # Re-arm the watchdog each iteration; this call replaces the previous
+        # pending timer, so a healthy loop that comes back around within
+        # _WATCHDOG_S never fires it. If the interpreter wedges (a thread
+        # pegging the GIL, or a deadlock) the loop can't re-arm, the timer
+        # fires, and faulthandler dumps ALL thread stacks to stderr -- which it
+        # can do without the GIL, so it works even when Python threads are
+        # starved. This is the diagnostic for the intermittent "dashboard
+        # unresponsive while still Running" hang. repeat=True keeps dumping so a
+        # sustained wedge is unmistakable (vs. a one-off slow cycle).
+        faulthandler.dump_traceback_later(_WATCHDOG_S, repeat=True)
         try:
             now = time.time()
             include_survey = CHANNEL_UTILIZATION and now >= next_survey_ts
@@ -122,6 +153,13 @@ def poll_loop():
                     mqtt_pub.publish_presence(db.presence_state(DB_PATH, PRESENCE_TIMEOUT_MINUTES))
             with _lock:
                 _state.update(snap)
+            # Heartbeat: one line per ~60s so the log shows the poller is alive
+            # and whether thread count / memory are climbing ahead of a hang.
+            if now - last_heartbeat >= 60:
+                last_heartbeat = now
+                print(f"[heartbeat] poll ok clients={snap.get('total_clients')} "
+                      f"threads={threading.active_count()} rss_mb={_rss_mb()}",
+                      flush=True)
         except Exception as e:  # noqa: BLE001 - keep the loop alive on any failure
             with _lock:
                 _state["error"] = str(e)
@@ -286,6 +324,10 @@ def main():
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)
+    # Dump all thread stacks to stderr on SIGUSR1, for on-demand inspection of a
+    # wedged process from a host shell: `kill -USR1 <pid>` (the poll-loop
+    # watchdog dumps automatically on a stall; this is the manual trigger).
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
     # Flask's own dev server (app.run) explicitly warns against long-running
