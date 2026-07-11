@@ -612,6 +612,31 @@ def presence_state(path, timeout_minutes):
     }
 
 
+# Event/history tables cleared by reset_history(). Deliberately NOT included:
+# device_names (the user's hand-assigned friendly names), and seen_devices
+# (wiping it would reset every first-seen date and blip presence tracking;
+# new-device detection re-seeds silently either way, so keeping it is free).
+_RESET_TABLES = ("ap_counts", "roam_events", "flapping_events",
+                 "new_device_events", "ap_events", "ap_status", "ap_health",
+                 "client_samples", "client_loc",
+                 "channel_overlap_events", "channel_overlap_state",
+                 "ap_misc_events")
+
+
+def reset_history(path):
+    """Clear all events + history (a 'the network was just re-tuned, the old
+    data no longer describes it' reset), preserving device names and
+    seen-device records. Returns {table: rows_deleted}. Safe mid-poll: the
+    next record()/record_ap_status() re-seed silently -- roam detection has
+    no prev_loc, AP status has no prev row, channel state recomputes -- so a
+    reset never triggers an event storm."""
+    deleted = {}
+    with _write_lock, _connect(path) as conn:
+        for table in _RESET_TABLES:
+            deleted[table] = conn.execute(f"DELETE FROM {table}").rowcount
+    return deleted
+
+
 def set_name(path, mac, name):
     mac = mac.lower()
     name = (name or "").strip()

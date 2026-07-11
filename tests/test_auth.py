@@ -87,3 +87,35 @@ def test_auth_guards_the_dashboard_page_too(tmp_path, monkeypatch):
     client = app_module.app.test_client()
     assert client.get("/").status_code == 401
     assert client.get("/", headers=_basic_header("ben", "s3cret")).status_code == 200
+
+
+# --- POST /api/reset_history ------------------------------------------------
+
+def test_reset_history_requires_explicit_confirmation(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch)
+    client = app_module.app.test_client()
+    assert client.post("/api/reset_history").status_code == 400
+    assert client.post("/api/reset_history", json={}).status_code == 400
+    assert client.post("/api/reset_history", json={"confirm": "yes"}).status_code == 400
+
+
+def test_reset_history_confirmed_clears_and_reports(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch)
+    import db
+    db.record(app_module.DB_PATH,
+              {"updated": 1000, "clients": [], "devices": [
+                  {"name": "AP1", "client_count": 0, "health": {"uptime_s": 5}}]}, 7, 30)
+    resp = app_module.app.test_client().post("/api/reset_history",
+                                             json={"confirm": "reset"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["ok"] is True and body["deleted"]["ap_health"] == 1
+    assert db.health(app_module.DB_PATH, hours=10**6)["aps"] == []
+
+
+def test_reset_history_is_behind_auth_when_enabled(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch, CREDS)
+    client = app_module.app.test_client()
+    assert client.post("/api/reset_history", json={"confirm": "reset"}).status_code == 401
+    assert client.post("/api/reset_history", json={"confirm": "reset"},
+                       headers=_basic_header("ben", "s3cret")).status_code == 200

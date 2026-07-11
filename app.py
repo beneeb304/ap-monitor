@@ -268,6 +268,23 @@ def api_set_name():
     return jsonify({"ok": True})
 
 
+@app.route("/api/reset_history", methods=["POST"])
+def api_reset_history():
+    """Clear all events + history (keeps device names and seen-device
+    records) — for when the network has been deliberately re-tuned and the
+    old data no longer describes it. Destructive, so it demands an explicit
+    confirmation body on top of POST-only + the global Basic Auth:
+        curl -X POST -u user:pass -H 'Content-Type: application/json' \
+             -d '{"confirm":"reset"}' http://<host>:8088/api/reset_history
+    """
+    data = request.get_json(silent=True) or {}
+    if data.get("confirm") != "reset":
+        return jsonify({"error": 'confirmation required: send {"confirm":"reset"}'}), 400
+    deleted = db.reset_history(DB_PATH)
+    print(f"[reset] history cleared by request: {deleted}", flush=True)
+    return jsonify({"ok": True, "deleted": deleted})
+
+
 @app.route("/api/client/<mac>")
 def api_client(mac):
     hours = float(request.args.get("hours", 24))

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.19.1
+
+- New `POST /api/reset_history` endpoint: clears all events and history —
+  outage log, uptime %, roam/flapping/new-device events, health samples,
+  channel-overlap state — while **keeping your device names and seen-device
+  records** (so no "NEW device" spam and no presence blip afterwards). For
+  when the network has been deliberately re-tuned and the old data no
+  longer describes it. Deliberately not a dashboard button: it requires a
+  POST with an explicit `{"confirm":"reset"}` body (plus Basic Auth if
+  enabled), so it can't be triggered by a stray click:
+  `curl -X POST -u USER:PASS -H 'Content-Type: application/json' -d '{"confirm":"reset"}' http://<host>:8088/api/reset_history`
+- A reset is storm-proof by design: the next poll re-seeds silently — no
+  phantom roams, no re-announced devices, no AP up/down noise.
+
 ## 1.19.0 — guard rails for a hand-tuned network
 
 Three new metrics/alarms, each born from a real incident found while

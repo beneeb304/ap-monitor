@@ -332,6 +332,45 @@ def test_reboot_now_shows_in_events_feed(db_path):
     assert row["ap"] == "Flint2"
 
 
+# --- reset_history ----------------------------------------------------------
+
+def test_reset_history_clears_events_keeps_names_and_seen(db_path):
+    ts = 1000
+    dev = [{"name": "Flint2", "client_count": 1, "online": True, "health": {"uptime_s": 60}}]
+    c = [{"mac": "aa:bb:cc:dd:ee:01", "ap": "Flint2", "hostname": "kingston",
+          "band": "5 GHz", "signal": -50, "ip": "10.0.0.50", "vendor": ""}]
+    db.record(db_path, {"updated": ts, "devices": dev, "clients": c}, 7, 30)
+    db.record_ap_status(db_path, ts, dev)
+    db.set_name(db_path, "aa:bb:cc:dd:ee:01", "kingston")
+
+    deleted = db.reset_history(db_path)
+    assert deleted["ap_counts"] >= 1 and deleted["ap_health"] >= 1
+
+    assert db.events(db_path) == []
+    assert db.ap_status(db_path) == {}
+    assert db.health(db_path, hours=10**6)["aps"] == []
+    # Preserved: friendly names and the seen-devices record.
+    assert db.get_names(db_path) == {"aa:bb:cc:dd:ee:01": "kingston"}
+    info = db.client_history(db_path, "aa:bb:cc:dd:ee:01")
+    assert info["first_seen"] is not None
+
+
+def test_reset_history_no_event_storm_on_next_poll(db_path):
+    ts = 1000
+    dev = [{"name": "Flint2", "client_count": 1, "online": True, "health": {"uptime_s": 60}}]
+    c = [{"mac": "aa:bb:cc:dd:ee:01", "ap": "Flint2", "hostname": "kingston",
+          "band": "5 GHz", "signal": -50, "ip": "10.0.0.50", "vendor": ""}]
+    db.record(db_path, {"updated": ts, "devices": dev, "clients": c}, 7, 30)
+    db.record_ap_status(db_path, ts, dev)
+    db.reset_history(db_path)
+    # Same network state on the next poll must re-seed silently: no phantom
+    # roams (client_loc gone), no NEW spam (seen_devices kept), no AP
+    # up/down announcements (ap_status re-seeds), no channel/clock events.
+    ev = db.record(db_path, {"updated": ts + 40, "devices": dev, "clients": c}, 7, 30)
+    ev += db.record_ap_status(db_path, ts + 40, dev)
+    assert ev == []
+
+
 # --- health() series: uptime/load/memory/temp/noise/util/overlay ----------
 
 def test_health_series_uptime_load_memory(db_path):
