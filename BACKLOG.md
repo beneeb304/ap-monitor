@@ -4,11 +4,12 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 ## Ideas / not started
 
-- **5 GHz channel-overlap detection** — the overlap check is currently 2.4 GHz-only ([app.py](app.py) passes `channel_24` to `check_channel_overlaps`). 5 GHz overlap matters less (many non-overlapping channels, plus 20/40/80 MHz width and DFS complicate "overlap"), and the live network's 5 GHz channels are all distinct today, so this is low priority — noted for completeness after the 2026-07-10 review.
+- **Hands-on OpenWrt / GL.iNet AP settings review + optimization (via the Claude Chrome extension)** — go beyond *reporting* dashboard findings and actually apply AP settings changes to optimize the network. Log into each AP's admin UI (Flint2 `10.0.0.1`, Linksys2 `10.0.0.2`, Linksys3 `10.0.0.3`) and review/adjust: the 5 GHz channel plan (control channel + **width** + DFS avoidance — see the note below; auto-mode can still overlap at 80 MHz and can land on DFS), 2.4 GHz width (pin 20 MHz), transmit power / cell size for a 3-AP roaming setup, band steering / fast-roaming (802.11r/k/v) if supported, and any other RF/config knobs the monitoring surfaces. Requires: the Chrome extension's navigation allowlist extended to each AP's admin URL, and per-change confirmation (applying wifi settings briefly drops associated clients). Added 2026-07-10 at the user's request.
+- **5 GHz channel-overlap detection** — the overlap check is currently 2.4 GHz-only ([app.py](app.py) passes `channel_24` to `check_channel_overlaps`). More valuable than first assessed: at 80 MHz width the current live picks (Linksys2 ch36, Linksys3 ch48) are the **same 80 MHz block (36–48)** and therefore overlap despite different control-channel numbers, and Flint2's ch60 is a **DFS** channel — none of which the by-number 2.4 GHz-style check would catch. Proper 5 GHz detection needs to account for channel width (compare occupied 20/40/80 MHz ranges, not just the control channel) and could also flag DFS use. Medium priority.
 
 ## Needs the user's action (not a code change)
 
-- **Linksys2 + Linksys3 are co-channel on 2.4 GHz (both channel 11)** — confirmed still active in the live review (2026-07-10): one `channel_overlap` event on 7/9 with no `channel_clear` since. Flint2 is on ch6. Fix on the routers: move one Linksys to channel 1 for a clean non-overlapping 1/6/11 plan. The monitor is correctly detecting and reporting this; nothing to change in code.
+- ~~**Linksys2 + Linksys3 co-channel on 2.4 GHz (both ch11)**~~ — resolved 2026-07-10: user pinned the three 2.4 GHz radios to a clean 1/6/11 plan (Flint2 ch6, Linksys2 ch1, Linksys3 ch11), replacing the previous "auto" mode that had let two APs land on ch11.
 
 ## Known limitations (not bugs, no fix planned)
 
