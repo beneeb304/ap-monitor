@@ -6,6 +6,7 @@ import time
 
 import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
+from waitress import serve
 
 import db
 import mqtt_out
@@ -202,7 +203,11 @@ def static_files(filename):
 def main():
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
-    app.run(host=CFG["listen_host"], port=CFG["listen_port"], threaded=True)
+    # Flask's own dev server (app.run) explicitly warns against long-running
+    # production use in its own startup banner -- waitress is a real WSGI
+    # server, far more resilient to a single slow/stuck request wedging the
+    # whole process than Werkzeug's development server is.
+    serve(app, host=CFG["listen_host"], port=CFG["listen_port"], threads=8)
 
 
 if __name__ == "__main__":

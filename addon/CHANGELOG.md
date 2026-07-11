@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.17.1 — important reliability fix, please update
+
+Switched the web server from Flask's built-in development server to
+**waitress**, a real WSGI server. Flask's own dev server prints "WARNING:
+This is a development server. Do not use it in a production deployment"
+on every startup — not boilerplate. If you experienced the dashboard (and
+"Open Web UI") becoming completely unresponsive while the add-on still
+showed "Running" with elevated CPU usage, this was almost certainly why:
+Werkzeug's dev server is known to wedge under exactly this kind of
+long-running, always-on load, in ways a production WSGI server is built
+to withstand. This is a drop-in swap — no config or behavior changes;
+verified Basic Auth and concurrent-request handling work identically,
+plus a live test confirming one slow/stuck client connection can no
+longer block other concurrent requests.
+
+If you're currently stuck with the old server, please restart the add-on
+after updating.
+
 ## 1.17.0
 
 - Wifi-based presence detection (opt-in, off by default; requires `mqtt`):
