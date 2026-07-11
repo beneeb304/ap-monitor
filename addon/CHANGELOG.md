@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.18.2 — root cause of the hang found: file-descriptor exhaustion
+
+Your add-on log revealed the actual failure: thousands of
+`OSError: [Errno 24] Too many open files` from waitress's `accept()`. The
+process ran out of file descriptors, so the kernel still completed the TCP
+handshake (the port "accepts") but the app could never accept the
+connection into a usable fd — every request hung with no response, and
+waitress spinning on the failing `accept()` is what burned ~50% CPU. Not a
+WSGI-server problem; an fd leak.
+
+Every fd path in our own code was tested against your real network and came
+back clean — SSH connects (success *and* failure), the SQLite
+open/close pattern, MQTT reconnects, and abandoned client connections — so
+the leak is something specific to the live deployment we can't yet
+reproduce. This release makes the add-on robust to the exhaustion and
+instruments it to pinpoint the source:
+
+- **Raises the open-file limit** to the container's hard cap at startup (and
+  logs the actual limits), for headroom.
+- **Proactive self-restart**: if open fds ever approach the limit, the
+  add-on exits for a clean Supervisor restart *before* the dashboard wedges
+  — a brief blip instead of hours down. (Pairs with the 1.18.1 watchdog,
+  which also restarts it if it does wedge.)
+- **fd telemetry**: the once-a-minute heartbeat now logs the open-fd count
+  and a breakdown by type (socket / db / pipe / file), so the log will show
+  the leak rate and exactly which kind of descriptor is accumulating —
+  enough to root-cause it definitively. If it climbs, please share a log.
+
 ## 1.18.1 — diagnostics + auto-recovery for the intermittent hang
 
 The dashboard becoming unresponsive while the add-on still shows "Running"

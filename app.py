@@ -2,6 +2,7 @@
 import faulthandler
 import hmac
 import os
+import resource
 import signal
 import sys
 import threading
@@ -110,6 +111,43 @@ def _rss_mb():
     return None
 
 
+def _fd_stats():
+    """(open_fd_count, {kind: n}) via /proc/self/fd, Linux-only. A production
+    hang was root-caused to file-descriptor exhaustion (accept() -> EMFILE);
+    logging the count and a per-type breakdown reveals both the leak rate and
+    which kind of fd (socket / db / pipe / file) is actually accumulating."""
+    try:
+        entries = os.listdir("/proc/self/fd")
+    except OSError:
+        return None, {}
+    kinds = {}
+    for e in entries:
+        try:
+            target = os.readlink(f"/proc/self/fd/{e}")
+        except OSError:
+            continue
+        if target.startswith("socket:"):
+            k = "socket"
+        elif ".db" in target:
+            k = "db"
+        elif target.startswith("pipe:"):
+            k = "pipe"
+        elif target.startswith("anon_inode:"):
+            k = "anon"
+        else:
+            k = "file"
+        kinds[k] = kinds.get(k, 0) + 1
+    return len(entries), kinds
+
+
+def _fd_soft_limit():
+    try:
+        soft = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+        return None if soft == resource.RLIM_INFINITY else soft
+    except (ValueError, OSError):
+        return None
+
+
 def poll_loop():
     db.init(DB_PATH)
     mqtt_pub = mqtt_out.setup(CFG)
@@ -154,12 +192,22 @@ def poll_loop():
             with _lock:
                 _state.update(snap)
             # Heartbeat: one line per ~60s so the log shows the poller is alive
-            # and whether thread count / memory are climbing ahead of a hang.
+            # and whether thread count / memory / file descriptors are climbing
+            # ahead of a hang (the hang was fd exhaustion -> accept() EMFILE).
             if now - last_heartbeat >= 60:
                 last_heartbeat = now
+                fd_n, fd_kinds = _fd_stats()
                 print(f"[heartbeat] poll ok clients={snap.get('total_clients')} "
-                      f"threads={threading.active_count()} rss_mb={_rss_mb()}",
-                      flush=True)
+                      f"threads={threading.active_count()} rss_mb={_rss_mb()} "
+                      f"fds={fd_n} {fd_kinds}", flush=True)
+                # Proactive safety valve: if fds approach the limit, exit for a
+                # clean Supervisor restart *before* accept() starts failing and
+                # the dashboard wedges. Better a brief blip than hours down.
+                soft = _fd_soft_limit()
+                if fd_n and soft and fd_n > 0.85 * soft:
+                    print(f"[fdguard] CRITICAL fds={fd_n} of limit {soft}; "
+                          "restarting to avoid an accept() EMFILE hang", flush=True)
+                    os._exit(1)
         except Exception as e:  # noqa: BLE001 - keep the loop alive on any failure
             with _lock:
                 _state["error"] = str(e)
@@ -324,6 +372,15 @@ def main():
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         sys.exit(1)
+    # Raise the open-file limit to the hard cap for headroom against the fd
+    # exhaustion that wedged the dashboard (accept() -> EMFILE). Logs the actual
+    # limits, which also tells us how tight the container's default was.
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        print(f"[fdlimit] RLIMIT_NOFILE raised {soft} -> {hard}", flush=True)
+    except (ValueError, OSError) as e:
+        print(f"[fdlimit] could not raise RLIMIT_NOFILE: {e}", flush=True)
     # Dump all thread stacks to stderr on SIGUSR1, for on-demand inspection of a
     # wedged process from a host shell: `kill -USR1 <pid>` (the poll-loop
     # watchdog dumps automatically on a stall; this is the manual trigger).
