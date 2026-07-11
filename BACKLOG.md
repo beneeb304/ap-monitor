@@ -11,10 +11,21 @@ Sorted by value-per-effort for the current goals: AP reliability/alerting first,
 
 - **Flint2 (GL.iNet, 2026-07-10, via SSH `uci`) — width + channel optimization.** Found the Flint2's radios were running on `auto` channel with over-wide bandwidth that undid the manual 2.4 GHz plan: 2.4 GHz was **HE40** (40 MHz on ch6, bleeding into the just-pinned ch1/ch11) and 5 GHz was **HE160** (160 MHz on ch60, spanning ch36–64 and swallowing *both* Linksys 5 GHz radios). Set 2.4 GHz → **HE20 + pinned ch6** and 5 GHz → **HE80 + pinned ch149** (non-DFS UNII-3, clear of both Linksys). Pinned the channels because a `wifi reload` left on `auto` re-picked bad channels (ch8 / ch40). Verified via `iwinfo` after reload. Country was already `US` on the Flint2 (the earlier `Country: 00` screenshot was a Linksys, since fixed by the user). `uci` config so it persists across reboots.
 
+## Physical layout + coverage goal (drives the plan)
+
+Ranch house, rectangular, **long axis N–S**. **Flint2** = basement center (interior/core coverage). **Linksys3** = main level **North** end. **Linksys2** = main level **South** end. Goal Ben stated (2026-07-10): **maximize outdoor yard coverage from the two Linksys**, and keep channel/width changes coverage-friendly. Implications: 2.4 GHz (penetration + range) is the primary yard band — keep 1/6/11 @ 20 MHz at max power. On 5 GHz, narrower width = more range, and UNII-3 (149–161) allows higher TX power in the US, so the **perimeter Linksys should get the high-power upper channels**, not the central Flint2. The two Linksys being at opposite ends of a long house means their current same-block 5 GHz overlap is partly mitigated by distance (not urgent).
+
+**Coverage-optimized 5 GHz target plan** (do as one coordinated change in the review, not piecemeal — moving Flint2 to 36 while the Linksys are still on 36/48 would re-collide):
+- Linksys2 (South) → **ch149 @ 40 MHz**, max power (south yard)
+- Linksys3 (North) → **ch157 @ 40 MHz**, max power (north yard)
+- Flint2 (center) → **ch36 @ 80 MHz** (interior throughput for its ~23 clients)
+- All non-DFS, none overlapping. Flint2 currently on 149/HE80 is a fine interim.
+
 ## Needs the user's action / for the settings review
 
-- **Linksys 5 GHz mutual overlap** — Linksys2 (ch36) and Linksys3 (ch48) at 80 MHz are both in the 36–48 block, so they overlap each other. With 3 APs at 80 MHz there are only two non-DFS 80 MHz blocks (36–48 and 149–161); Flint2 now holds 149, so the clean options are: move one Linksys to a DFS 80 MHz block (e.g. 100), or drop the two Linksys to 40 MHz (giving four non-DFS blocks: 36/44/149/157) — decide in the hands-on review.
 - **Verify Linksys 2.4 GHz width is 20 MHz** — the Flint2 was silently on 40 MHz, which negated its channel pin; confirm the two Linksys aren't doing the same (a 40 MHz radio on ch1 or ch11 re-introduces overlap). Check during the review.
+- **Set Linksys radios to max legal TX power** for yard reach (were 24 dBm; confirm that's the regional max for the chosen channel). Also check band-steering / min-RSSI so edge/yard devices can fall back to stronger 2.4 GHz instead of clinging to weak 5 GHz.
+- **Are the Linksys on OpenWrt?** The poller reaches all three via `ubus`/`iwinfo`, so the same SSH key (`~/.ssh/ap_monitor`) likely works on the Linksys too (`uci` config) — if so, the whole coordinated plan above can be applied over SSH in the review, no LuCI needed. Verify first.
 - ~~**Set the wifi Country Code (was `00` on the Linksys)**~~ — resolved 2026-07-10: user set the country code on both Linksys APs; Flint2 was already `US`.
 - ~~**Linksys2 + Linksys3 co-channel on 2.4 GHz (both ch11)**~~ — resolved 2026-07-10: 2.4 GHz is now a clean 1/6/11 plan (Linksys2 ch1, Flint2 ch6 [pinned this session], Linksys3 ch11).
 
