@@ -131,7 +131,6 @@ let tab = "clients", healthCharts = {};
 function sigClass(s){ if(s==null) return ""; if(s>=-60) return "s-good"; if(s>=-72) return "s-ok"; return "s-bad"; }
 function bandClass(b){ if(b&&b.startsWith("5")) return "b5"; if(b&&b.startsWith("6")) return "b6"; return ""; }
 function ago(ts){ const d=Math.max(0,Math.round(Date.now()/1000-ts)); return d+"s ago"; }
-function hhmmss(ts){ return new Date(ts*1000).toLocaleTimeString(); }
 function when(ts){ return ts ? new Date(ts*1000).toLocaleString() : "—"; }
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function hl(s, q){ s=esc(s); if(!q) return s; const i=s.toLowerCase().indexOf(q); return i<0?s:s.slice(0,i)+"<mark>"+s.slice(i,i+q.length)+"</mark>"+s.slice(i+q.length); }
@@ -212,28 +211,28 @@ async function refreshEvents(){
   const el = document.getElementById("events");
   el.innerHTML = ev.length ? ev.map(e =>
     e.kind==="ap_offline" || e.kind==="ap_online"
-    ? `<div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event"><span class="t">${when(e.ts)}</span><br>
          <b style="color:${e.kind==="ap_offline"?"#ff6b6b":"#51cf66"}">${e.kind==="ap_offline"?"AP OFFLINE":"AP back online"}</b>
          <b>${esc(e.ap)}</b> <span class="muted">${esc(e.error||'')}</span></div>`
     : e.kind==="new"
-    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${when(e.ts)}</span><br>
          <span class="badge-new">NEW</span> <b>${esc(e.hostname||e.mac)}</b> <span class="muted">${esc(e.vendor||'')}</span></div>`
     : e.kind==="new_untrusted"
-    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${when(e.ts)}</span><br>
          <span class="badge-untrusted">UNTRUSTED</span> <b>${esc(e.hostname||e.mac)}</b> <span class="muted">${esc(e.vendor||'')} · not on known_macs</span></div>`
     : e.kind==="flapping"
-    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${when(e.ts)}</span><br>
          <span class="badge-flap">FLAPPING</span> <b>${esc(e.hostname||e.mac)}</b>
          <span class="muted">${esc(e.error||'')} · now on ${esc(e.ap)}</span></div>`
     : e.kind==="channel_overlap"
-    ? `<div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event"><span class="t">${when(e.ts)}</span><br>
          <span class="badge-flap">CH OVERLAP</span> <b>${esc(e.ap)}</b>
          <span class="muted">${esc(e.band)} · ${esc(e.error||'')}</span></div>`
     : e.kind==="channel_clear"
-    ? `<div class="event"><span class="t">${hhmmss(e.ts)}</span><br>
+    ? `<div class="event"><span class="t">${when(e.ts)}</span><br>
          <b style="color:#51cf66">Channel overlap cleared</b> <b>${esc(e.ap)}</b>
          <span class="muted">${esc(e.band)}</span></div>`
-    : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${hhmmss(e.ts)}</span><br>
+    : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${when(e.ts)}</span><br>
          <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)} <span class="muted">${esc(e.band)}</span></div>`
   ).join("") : '<span class="muted">None yet.</span>';
   document.querySelectorAll("#events .event[data-mac]").forEach(d =>

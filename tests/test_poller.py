@@ -131,6 +131,18 @@ def test_util_pct_delta_math():
 # channel of its upstream AP, not this device's own -- including it would
 # misattribute channels on mesh/repeater setups.
 
+def test_poll_device_ssh_error_with_empty_str_gets_fallback_detail(monkeypatch):
+    """Some exceptions (e.g. a bare socket.timeout) stringify to "", which
+    would otherwise render as an uninformative "TimeoutError:" in the UI."""
+    def raise_bare_timeout(host, cfg, cmd):
+        raise TimeoutError
+
+    monkeypatch.setattr(poller, "_ssh_run", raise_bare_timeout)
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert health is None
+    assert err == "TimeoutError: no further detail"
+
+
 def test_poll_device_captures_master_mode_channel(monkeypatch):
     out = """==DEV ra0==
 {"ssid":"home","frequency":2437,"channel":6,"mode":"Master"}

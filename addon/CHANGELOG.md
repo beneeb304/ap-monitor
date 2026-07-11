@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.17.2
+
+Two small fixes found during a live production review:
+
+- Outage error messages could show as a bare `TimeoutError:` with nothing
+  after the colon — some exceptions stringify to `""`, and the outage
+  handler didn't account for that. Now falls back to
+  `TimeoutError: no further detail` so outages stay actionable.
+- The dashboard's events feed showed time-of-day only, with no date —
+  inconsistent with the Health tab's "Recent Outages" panel, and genuinely
+  ambiguous once the feed spans more than a day (an AM entry could sit
+  right above a PM entry from the *previous* day with nothing to tell them
+  apart). The feed now shows full date + time like the Outages panel does.
+
 ## 1.17.1 — important reliability fix, please update
 
 Switched the web server from Flask's built-in development server to

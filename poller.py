@@ -239,7 +239,10 @@ def poll_device(device, cfg, include_survey=True):
     try:
         out, _ = _ssh_run(device["host"], cfg, cmd)
     except Exception as e:  # noqa: BLE001 - report any SSH/connection failure
-        return [], None, f"{type(e).__name__}: {e}"
+        # str(e) is empty for some exceptions (e.g. a bare socket.timeout) --
+        # exception instances are truthy regardless, so check str(e) itself,
+        # not e -- which would otherwise render as an uninformative "TimeoutError:".
+        return [], None, f"{type(e).__name__}: {str(e) or 'no further detail'}"
 
     blocks = _parse_blocks(out)
     health = _parse_health(out)
