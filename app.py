@@ -1,6 +1,7 @@
 """AP Monitor web app: background SSH poller + live dashboard."""
 import hmac
 import os
+import sys
 import threading
 import time
 
@@ -200,7 +201,91 @@ def static_files(filename):
     return send_from_directory(os.path.join(HERE, "static"), filename)
 
 
+# Config keys the app/poller read WITHOUT a default -- a missing one surfaces
+# as an opaque KeyError deep in a background thread (poll_interval crashes the
+# poll loop; listen_host/port crash serve(); the ssh_* keys make every poll
+# raise). Better to catch them up front with an actionable message.
+_REQUIRED_KEYS = ("poll_interval", "listen_host", "listen_port", "ssh_user",
+                  "ssh_port", "ssh_timeout", "ssh_key", "devices")
+
+
+def validate_config(cfg):
+    """Check the loaded config for misconfigurations that otherwise fail
+    silently or as a confusing per-AP "outage". Returns (errors, warnings):
+    errors are fatal (caller should refuse to start), warnings are advisory.
+
+    Motivated by a real incident: an `ssh_key` that pointed at a directory
+    made every poll raise IsADirectoryError, which the offline debounce then
+    reported as all APs dropping at once -- a monitor-side misconfiguration
+    masquerading as a total network outage, and silently tanking uptime %.
+    """
+    errors, warnings = [], []
+
+    for key in _REQUIRED_KEYS:
+        if cfg.get(key) is None:
+            errors.append(f"missing required config key: {key}")
+
+    # SSH private key -- the exact IsADirectoryError class of failure. Checked
+    # with the same expanduser() the poller applies, so the path we validate
+    # is the path it will actually open.
+    raw_key = cfg.get("ssh_key")
+    if raw_key:
+        key = os.path.expanduser(str(raw_key))
+        if not os.path.exists(key):
+            errors.append(f"ssh_key not found: {key} -- check the path "
+                          "(see addon/DOCS.md for the add-on location)")
+        elif os.path.isdir(key):
+            errors.append(f"ssh_key is a directory, not a file: {key} -- you "
+                          "likely created a folder where the key file should be")
+        elif not os.access(key, os.R_OK):
+            errors.append(f"ssh_key is not readable: {key} -- check permissions")
+
+    # devices: at least one, each a dict with name + host, names unique.
+    devices = cfg.get("devices")
+    if isinstance(devices, list):
+        if not devices:
+            errors.append("devices is empty -- list at least one AP/router to monitor")
+        seen_names = set()
+        for i, d in enumerate(devices):
+            if not isinstance(d, dict) or not d.get("name") or not d.get("host"):
+                errors.append(f"devices[{i}] must have both a name and a host")
+                continue
+            name = d["name"]
+            if name in seen_names:
+                # ap_status, the offline fail-counter, and MQTT discovery are
+                # all keyed by name; a duplicate would clobber the other AP.
+                errors.append(f"duplicate device name: {name!r} -- names must be unique")
+            seen_names.add(name)
+    elif devices is not None:
+        errors.append("devices must be a list")
+
+    # dhcp_source is tolerated-if-missing by the poller (leases are best-effort
+    # enrichment), so it's a warning, not a hard error -- but omitting it means
+    # no MAC->hostname/IP resolution, which is almost never intended.
+    if cfg.get("dhcp_source") is None:
+        warnings.append("dhcp_source unset -- client hostnames/IPs will be blank "
+                        "(set it to your DHCP server, usually the main router)")
+
+    # Half-configured dashboard auth silently leaves the dashboard wide open.
+    has_user = bool(str(cfg.get("dashboard_username", "") or ""))
+    has_pass = bool(str(cfg.get("dashboard_password", "") or ""))
+    if has_user != has_pass:
+        warnings.append("only one of dashboard_username/dashboard_password is set, "
+                        "so Basic Auth is OFF -- both are required to enable it")
+
+    return errors, warnings
+
+
 def main():
+    errors, warnings = validate_config(CFG)
+    for w in warnings:
+        print(f"AP Monitor config warning: {w}", file=sys.stderr)
+    if errors:
+        print(f"AP Monitor cannot start -- fix the config ({CONFIG_PATH}):",
+              file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
     t = threading.Thread(target=poll_loop, daemon=True)
     t.start()
     # Flask's own dev server (app.run) explicitly warns against long-running

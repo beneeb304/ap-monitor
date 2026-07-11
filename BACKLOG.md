@@ -2,14 +2,22 @@
 
 Sorted by value-per-effort for the current goals: AP reliability/alerting first, then network health, then security hardening.
 
+## Ideas / not started
+
+- **5 GHz channel-overlap detection** — the overlap check is currently 2.4 GHz-only ([app.py](app.py) passes `channel_24` to `check_channel_overlaps`). 5 GHz overlap matters less (many non-overlapping channels, plus 20/40/80 MHz width and DFS complicate "overlap"), and the live network's 5 GHz channels are all distinct today, so this is low priority — noted for completeness after the 2026-07-10 review.
+
+## Needs the user's action (not a code change)
+
+- **Linksys2 + Linksys3 are co-channel on 2.4 GHz (both channel 11)** — confirmed still active in the live review (2026-07-10): one `channel_overlap` event on 7/9 with no `channel_clear` since. Flint2 is on ch6. Fix on the routers: move one Linksys to channel 1 for a clean non-overlapping 1/6/11 plan. The monitor is correctly detecting and reporting this; nothing to change in code.
+
 ## Known limitations (not bugs, no fix planned)
 
 - **Flint2 (GL.iNet MediaTek/mt76) reports identical `noise_24`/`noise_5`** — confirmed via direct SSH `ubus call iwinfo info` on both `ra0` (2.4GHz) and `rax0` (5GHz): the driver itself returns the same `-72` noise value for both radios. `poller.py` is correctly relaying what the hardware reports; this is a chip/driver characteristic, not a parsing bug. Documented as a caveat in the README's "Interpreting health metrics" section for GL.iNet Flint2 owners. Found during a live dashboard review, 2026-07-10.
 
-No open items — everything below has shipped or been deliberately dropped.
-
 ## Done
 
+- **Startup config validation** — validate the config once at startup and refuse to start with a clear message instead of failing deep in the poll loop. Prompted by a real incident found in the live review: an `ssh_key` pointing at a *directory* made every poll raise `IsADirectoryError`, which the offline debounce reported as all APs dropping simultaneously — a monitor-side misconfig masquerading as a total outage and tanking uptime %. Checks missing/unreadable/directory `ssh_key`, missing required keys, empty/malformed `devices`, duplicate device names; warns (non-fatal) on half-configured Basic Auth and unset `dhcp_source`. Pure `validate_config(cfg)` returning `(errors, warnings)`, called from `main()`; 9 new tests (v1.18.0, 2026-07).
+- **Event-feed category filter** — toggle pills (Roams / New devices / AP up/down / Flapping / Channel) above the events feed so a burst of roams can't bury rarer events (channel-overlap, new/untrusted). Fetches a wider window (250) server-side before filtering so rare events surface even under heavy roam volume, still caps the render at 80; selection persisted in `localStorage`. Directly addresses the high-roam-volume gap noted in the 2026-07-10 review (v1.18.0, 2026-07).
 - **Blank outage error messages** — `poller.py:242`'s exception handler (`f"{type(e).__name__}: {e}"`) produced a message with nothing after the colon for some timeout paths, e.g. a real production outage showed as `TimeoutError:` with no detail in both the events feed and the Health tab's "Recent Outages (7d)" panel (7/8/2026, 9:07:22 PM, 53s, Flint2) — `str(e)` was empty for that exception, and `e` itself is truthy regardless (exception instances don't define `__bool__`), so an `e or ...` fallback silently didn't help; fixed by checking `str(e)` explicitly. Now falls back to `"TimeoutError: no further detail"`. Found and fixed during a live dashboard review (v1.17.2, 2026-07).
 - **Events feed shows time-of-day only, no date** — the dashboard's events feed used a `hhmmss()` formatter that omitted the date, unlike the Health tab's "Recent Outages" panel (`when()`, e.g. "7/8/2026, 9:07:22 PM") for the same underlying event data. Confirmed via live data that the feed spans multiple calendar days with no visual boundary — an AM entry sat immediately above a PM entry from the *previous* day with nothing to distinguish them. Fixed by switching every event row to the same `when()` date+time formatter and removing the now-unused `hhmmss()` (v1.17.2, 2026-07).
 - **Switch to waitress (production WSGI server)** — found in production: the dashboard went fully unresponsive ("Running" + elevated CPU, but zero HTTP response even at the TCP level) after running for a while. Flask's dev server explicitly warns against exactly this always-on scenario; swapped for `waitress`, verified as a true drop-in (Basic Auth, concurrent requests, and a live test proving one stuck client connection can't block others) (v1.17.1, 2026-07).

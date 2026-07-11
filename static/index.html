@@ -63,6 +63,10 @@
   .event { padding: 7px 0; border-bottom: 1px solid #20262f; font-size: 13px; cursor: pointer; }
   .event .t { color: #8a93a3; font-size: 11px; }
   .event .arrow { color: #ffc857; }
+  .ev-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .evf { padding: 3px 9px; border-radius: 6px; background: #1d232e; border: 1px solid #2c3442; color: #8a93a3; font-size: 11px; cursor: pointer; user-select: none; }
+  .evf:hover { border-color: #3a4f7e; }
+  .evf.active { background: #2b3a5e; border-color: #3a4f7e; color: #fff; }
   .badge-new { background: #14502b; color: #6df0a0; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
   .badge-flap { background: #5a3a14; color: #ffb86d; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
   .badge-untrusted { background: #5a1414; color: #ff8080; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
@@ -115,6 +119,7 @@
   </div>
   <div class="panel">
     <h3>Events</h3>
+    <div id="event-filters" class="ev-filters"></div>
     <div id="events"><span class="muted">None yet.</span></div>
   </div>
 </main>
@@ -204,12 +209,47 @@ async function refreshHistory(){
   } else { chart.data.labels = labels; chart.data.datasets = datasets; chart.update(); }
 }
 
+// Event feed category filtering. Each event `kind` maps to one of a handful
+// of user-facing categories; the filter bar toggles which categories show.
+const EV_CATS = [["roam","Roams"],["new","New devices"],["ap","AP up/down"],
+                 ["flapping","Flapping"],["channel","Channel"]];
+function evCat(kind){
+  if(kind==="new"||kind==="new_untrusted") return "new";
+  if(kind==="ap_online"||kind==="ap_offline") return "ap";
+  if(kind==="flapping") return "flapping";
+  if(kind==="channel_overlap"||kind==="channel_clear") return "channel";
+  return "roam";  // roam + any future/unknown kind
+}
+let evFilter;
+try { evFilter = new Set(JSON.parse(localStorage.getItem("evFilter"))); }
+catch(e){ evFilter = null; }
+// Empty/absent selection means "show everything" -- the sensible default and
+// what a fresh browser (or an all-off state) resets to on reload.
+if(!evFilter || evFilter.size===0) evFilter = new Set(EV_CATS.map(c=>c[0]));
+
+function renderEventFilters(){
+  const el = document.getElementById("event-filters");
+  el.innerHTML = EV_CATS.map(([k,label]) =>
+    `<span class="evf ${evFilter.has(k)?'active':''}" data-cat="${k}">${esc(label)}</span>`).join("");
+  el.querySelectorAll(".evf").forEach(p =>
+    p.addEventListener("click", () => {
+      const c = p.dataset.cat;
+      evFilter.has(c) ? evFilter.delete(c) : evFilter.add(c);
+      localStorage.setItem("evFilter", JSON.stringify([...evFilter]));
+      renderEventFilters(); refreshEvents();
+    }));
+}
+
 async function refreshEvents(){
   let ev;
-  try { ev = (await (await fetch("api/events?limit=80")).json()).events; }
+  // Fetch a wider window than we display so category filtering can surface
+  // rarer events (channel/new/flapping) that a burst of roams would otherwise
+  // push past the visible cap; we still render at most 80.
+  try { ev = (await (await fetch("api/events?limit=250")).json()).events; }
   catch(e){ return; }
   const el = document.getElementById("events");
-  el.innerHTML = ev.length ? ev.map(e =>
+  const shown = ev.filter(e => evFilter.has(evCat(e.kind))).slice(0, 80);
+  el.innerHTML = shown.length ? shown.map(e =>
     e.kind==="ap_offline" || e.kind==="ap_online"
     ? `<div class="event"><span class="t">${when(e.ts)}</span><br>
          <b style="color:${e.kind==="ap_offline"?"#ff6b6b":"#51cf66"}">${e.kind==="ap_offline"?"AP OFFLINE":"AP back online"}</b>
@@ -234,7 +274,7 @@ async function refreshEvents(){
          <span class="muted">${esc(e.band)}</span></div>`
     : `<div class="event" data-mac="${esc(e.mac)}"><span class="t">${when(e.ts)}</span><br>
          <b>${esc(e.hostname||e.mac)}</b> ${esc(e.from_ap)} <span class="arrow">→</span> ${esc(e.to_ap)} <span class="muted">${esc(e.band)}</span></div>`
-  ).join("") : '<span class="muted">None yet.</span>';
+  ).join("") : `<span class="muted">${ev.length ? "No events match the current filters." : "None yet."}</span>`;
   document.querySelectorAll("#events .event[data-mac]").forEach(d =>
     d.addEventListener("click", () => openClient(d.dataset.mac)));
 }
@@ -420,6 +460,7 @@ document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () =>
 document.getElementById("search").addEventListener("input", refreshClients);
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
+renderEventFilters();
 refreshClients(); refreshHistory(); refreshEvents();
 setInterval(refreshClients, 3000);
 setInterval(refreshEvents, 4000);

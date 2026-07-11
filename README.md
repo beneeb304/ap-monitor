@@ -21,7 +21,7 @@ Most tools (including router UIs) only show clients on a single device. AP Monit
 - **Silent-reboot detection**: an `ap_reboot` event fires when an AP's uptime goes backwards
 - **MQTT event topics**: new-device, unknown-device, roam, AP up/down, reboot, flapping, and channel-overlap events on `ap_monitor/events/<kind>` for HA automations (randomized-MAC joins are segregated to `new_random` to keep alerts quiet)
 - **SSH host-key pinning**: trust-on-first-use; a changed host key is rejected and surfaces as an AP-offline error
-- **Roaming events feed & flapping detection**: logs every AP-to-AP move, and flags a client roaming repeatedly within a short window as a distinct `flapping` event — a sign of channel overlap or a sick radio, not normal movement
+- **Roaming events feed & flapping detection**: logs every AP-to-AP move, and flags a client roaming repeatedly within a short window as a distinct `flapping` event — a sign of channel overlap or a sick radio, not normal movement. The feed has per-category toggle filters (roams / new devices / AP up-down / flapping / channel) so a busy roaming client can't bury rarer, more important events
 - **Channel-overlap warning**: flags when two APs' 2.4 GHz radios sit on the same or overlapping channel — a common cause of exactly the flapping/roam-storm behavior above — with a `channel_overlap` event (and `channel_clear` when fixed), no config needed
 - **Search & AP filter**: filter by name, hostname, IP, MAC, vendor, or AP — or click an AP chip to see just its clients
 - **No agent on the routers** — pure SSH + `ubus`/`iwinfo`, which ship on OpenWrt
@@ -67,6 +67,8 @@ cp config.example.yaml config.yaml
 ```
 
 Edit `config.yaml`: set `dhcp_source` (usually your main router) and list every device under `devices` with a `name` (its hostname is a good choice) and `host` (its LAN IP). See the comments in the file for Docker-specific paths.
+
+The app validates the config at startup and refuses to start with a specific message if something's off — a missing/unreadable `ssh_key` (or one that points at a directory rather than the key file), missing required keys, an empty/malformed `devices` list, or duplicate device names. It also logs a non-fatal warning if only one of `dashboard_username`/`dashboard_password` is set (so Basic Auth is silently off) or if `dhcp_source` is unset. Check the add-on / container log if it won't start.
 
 ## Install
 

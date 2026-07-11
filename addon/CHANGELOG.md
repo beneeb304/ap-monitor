@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.18.0
+
+- **Startup config validation.** The add-on now checks your config once at
+  startup and refuses to start with a clear, specific message instead of
+  failing deep inside the poll loop. This was prompted by a real incident:
+  an `ssh_key` that pointed at a *directory* (not the key file) made every
+  poll raise `IsADirectoryError`, which then showed up as all your APs
+  "going offline" simultaneously — a monitor-side misconfiguration
+  masquerading as a total network outage, and quietly dragging down your
+  uptime %. Validation now catches: a missing/unreadable `ssh_key` or one
+  that's a directory; missing required keys; an empty or malformed
+  `devices` list; and duplicate device names. It also *warns* (without
+  refusing to start) when only one of `dashboard_username` /
+  `dashboard_password` is set (so Basic Auth is silently off), or when
+  `dhcp_source` is unset (so client hostnames/IPs will be blank).
+- **Event-feed category filter.** The dashboard's events feed now has a row
+  of toggle pills — Roams, New devices, AP up/down, Flapping, Channel — so
+  a burst of roaming clients can't bury rarer, more important events like a
+  channel-overlap warning or a new/untrusted device. The feed now scans a
+  wider recent window server-side before filtering, so those rare events
+  surface even when lots of roams sit above them. Your selection is
+  remembered in the browser.
+
 ## 1.17.2
 
 Two small fixes found during a live production review:
