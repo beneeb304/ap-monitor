@@ -131,6 +131,68 @@ def test_util_pct_delta_math():
 # channel of its upstream AP, not this device's own -- including it would
 # misattribute channels on mesh/repeater setups.
 
+def test_parse_health_clock_section():
+    out = """==HEALTH==
+==UPTIME==
+1000 2000
+==CLOCK==
+1783810588
+"""
+    h = poller._parse_health(out)
+    assert h["clock_ts"] == 1783810588
+
+
+def test_poll_device_computes_clock_skew(monkeypatch):
+    import time as _time
+    ap_clock = int(_time.time()) - 777600  # AP is 9 days behind
+    out = f"""==DEV ra0==
+{{"ssid":"home","frequency":2437,"channel":6,"mode":"Master"}}
+==ASSOC==
+{{"results":[]}}
+==SURVEY==
+
+==END==
+==HEALTH==
+==UPTIME==
+1000 2000
+==CLOCK==
+{ap_clock}
+"""
+    monkeypatch.setattr(poller, "_ssh_run", lambda host, cfg, cmd: (out, ""))
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert err is None
+    # A couple of seconds of test latency is fine; 9 days is the signal.
+    assert abs(health["clock_skew"] - (-777600)) < 10
+    assert "clock_ts" not in health  # raw timestamp replaced by the skew
+
+
+def test_poll_device_captures_txpower_master_mode_only(monkeypatch):
+    out = """==DEV ra0==
+{"ssid":"home","frequency":2437,"channel":6,"mode":"Master","txpower":26}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==DEV apcli0==
+{"frequency":5745,"channel":149,"mode":"Client","txpower":20}
+==ASSOC==
+{"results":[]}
+==SURVEY==
+
+==END==
+==HEALTH==
+==UPTIME==
+1000 2000
+"""
+    monkeypatch.setattr(poller, "_ssh_run", lambda host, cfg, cmd: (out, ""))
+    _, health, err = poller.poll_device({"name": "Flint2", "host": "10.0.0.1"}, {}, False)
+    assert err is None
+    assert health["txpower_24"] == 26
+    # The client-mode backhaul radio's power must not be attributed to 5 GHz.
+    assert "txpower_5" not in health
+
+
 def test_poll_device_ssh_error_with_empty_str_gets_fallback_detail(monkeypatch):
     """Some exceptions (e.g. a bare socket.timeout) stringify to "", which
     would otherwise render as an uninformative "TimeoutError:" in the UI."""

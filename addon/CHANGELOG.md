@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.19.0 — guard rails for a hand-tuned network
+
+Three new metrics/alarms, each born from a real incident found while
+hand-optimizing this network's RF settings:
+
+- **Clock skew** — each AP's wall clock is compared to the monitor's every
+  health sample. New Health-tab tile (red when >60s off), HA sensor, and an
+  edge-triggered `clock_skew` event (fires once when a clock goes bad, once
+  more if it goes bad again — not every sample). Found in production: two
+  APs ran **9 days behind** because a missing DNS upstream silently kept
+  NTP from ever syncing; nothing surfaced it.
+- **Channel-drift alarm** — a `channel_changed` event fires when an AP's
+  broadcast channel differs from the previous health sample. On a network
+  with deliberately pinned channels, any change means something reverted
+  (factory reset, config rollback, DFS radar fallback) — alarm-worthy in a
+  way it wouldn't be with auto-channel. Shown in the events feed (CH
+  CHANGED badge) and published to `ap_monitor/events/channel_changed`.
+- **TX power** — per-band transmit power tile + HA diagnostic sensors. A
+  silent power drop (driver update, regulatory change) shrinks coverage
+  with no other symptom; now it's visible and automatable.
+- Silent-reboot (`ap_reboot`) events now appear in the dashboard events
+  feed too — previously they were published to MQTT only.
+
 ## 1.18.2 — root cause of the hang found: file-descriptor exhaustion
 
 Your add-on log revealed the actual failure: thousands of

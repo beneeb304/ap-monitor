@@ -82,9 +82,19 @@ def init(path):
                 temp REAL, noise_24 INTEGER, noise_5 INTEGER, noise_6 INTEGER,
                 util_24 REAL, util_5 REAL, util_6 REAL,
                 overlay_total INTEGER, overlay_avail INTEGER,
-                channel_24 INTEGER, channel_5 INTEGER, channel_6 INTEGER
+                channel_24 INTEGER, channel_5 INTEGER, channel_6 INTEGER,
+                txpower_24 INTEGER, txpower_5 INTEGER, txpower_6 INTEGER,
+                clock_skew INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_ap_health ON ap_health(ap, ts);
+
+            -- Per-AP health events that aren't up/down transitions: silent
+            -- reboots, a pinned channel drifting, a stuck/skewed clock.
+            CREATE TABLE IF NOT EXISTS ap_misc_events (
+                ts INTEGER NOT NULL, kind TEXT NOT NULL, ap TEXT NOT NULL,
+                band TEXT, detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ap_misc_ts ON ap_misc_events(ts);
 
             CREATE TABLE IF NOT EXISTS channel_overlap_state (
                 ap1 TEXT NOT NULL, ap2 TEXT NOT NULL, band TEXT NOT NULL,
@@ -105,7 +115,9 @@ def init(path):
                          ("noise_5", "INTEGER"), ("noise_6", "INTEGER"),
                          ("util_24", "REAL"), ("util_5", "REAL"), ("util_6", "REAL"),
                          ("overlay_total", "INTEGER"), ("overlay_avail", "INTEGER"),
-                         ("channel_24", "INTEGER"), ("channel_5", "INTEGER"), ("channel_6", "INTEGER")):
+                         ("channel_24", "INTEGER"), ("channel_5", "INTEGER"), ("channel_6", "INTEGER"),
+                         ("txpower_24", "INTEGER"), ("txpower_5", "INTEGER"), ("txpower_6", "INTEGER"),
+                         ("clock_skew", "INTEGER")):
             try:
                 conn.execute(f"ALTER TABLE ap_health ADD COLUMN {col} {typ}")
             except sqlite3.OperationalError:
@@ -234,25 +246,66 @@ def record(path, snap, retention_days, sample_interval,
                 if not h:
                     continue
                 prev = conn.execute(
-                    "SELECT uptime FROM ap_health WHERE ap=? ORDER BY ts DESC LIMIT 1",
+                    "SELECT uptime, channel_24, channel_5, channel_6, clock_skew "
+                    "FROM ap_health WHERE ap=? ORDER BY ts DESC LIMIT 1",
                     (d["name"],),
                 ).fetchone()
                 up = h.get("uptime_s")
                 if prev is not None and prev["uptime"] is not None and up is not None \
                         and up < prev["uptime"]:
+                    conn.execute(
+                        "INSERT INTO ap_misc_events (ts,kind,ap,band,detail) VALUES (?,?,?,?,?)",
+                        (ts, "ap_reboot", d["name"], None, "uptime went backwards"),
+                    )
                     new_events.append({"ts": ts, "kind": "ap_reboot", "ap": d["name"],
                                        "uptime_s": up})
+                # Channel drift: every radio in this deployment is pinned, so a
+                # channel changing between samples means something reverted
+                # (factory reset, config rollback, DFS fallback) -- alarm-worthy
+                # in a way an auto-channel setup wouldn't be.
+                if prev is not None:
+                    for bk, band in (("24", "2.4 GHz"), ("5", "5 GHz"), ("6", "6 GHz")):
+                        old_ch, new_ch = prev[f"channel_{bk}"], h.get(f"channel_{bk}")
+                        if old_ch is not None and new_ch is not None and old_ch != new_ch:
+                            detail = f"ch{old_ch} → ch{new_ch}"
+                            conn.execute(
+                                "INSERT INTO ap_misc_events (ts,kind,ap,band,detail) "
+                                "VALUES (?,?,?,?,?)",
+                                (ts, "channel_changed", d["name"], band, detail),
+                            )
+                            new_events.append({"ts": ts, "kind": "channel_changed",
+                                               "ap": d["name"], "band": band,
+                                               "from_channel": old_ch, "to_channel": new_ch})
+                # Clock skew: edge-triggered like reboots -- one event when the
+                # clock goes bad (>60s off), not one per sample while it stays
+                # bad. Found in production: a dead DNS upstream left NTP unable
+                # to sync and two APs' clocks 9 days behind, silently.
+                skew = h.get("clock_skew")
+                if skew is not None and abs(skew) > 60:
+                    prev_skew = prev["clock_skew"] if prev is not None else None
+                    if prev_skew is None or abs(prev_skew) <= 60:
+                        conn.execute(
+                            "INSERT INTO ap_misc_events (ts,kind,ap,band,detail) "
+                            "VALUES (?,?,?,?,?)",
+                            (ts, "clock_skew", d["name"], None,
+                             f"AP clock off by {skew:+d}s -- check NTP/DNS"),
+                        )
+                        new_events.append({"ts": ts, "kind": "clock_skew",
+                                           "ap": d["name"], "skew_s": skew})
                 conn.execute(
                     "INSERT INTO ap_health (ts,ap,uptime,load1,load5,load15,mem_total,mem_avail,"
                     "temp,noise_24,noise_5,noise_6,util_24,util_5,util_6,"
-                    "overlay_total,overlay_avail,channel_24,channel_5,channel_6) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "overlay_total,overlay_avail,channel_24,channel_5,channel_6,"
+                    "txpower_24,txpower_5,txpower_6,clock_skew) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (ts, d["name"], up, h.get("load1"), h.get("load5"), h.get("load15"),
                      h.get("mem_total_kb"), h.get("mem_avail_kb"), h.get("temp_c"),
                      h.get("noise_24"), h.get("noise_5"), h.get("noise_6"),
                      h.get("util_24"), h.get("util_5"), h.get("util_6"),
                      h.get("overlay_total_kb"), h.get("overlay_avail_kb"),
-                     h.get("channel_24"), h.get("channel_5"), h.get("channel_6")),
+                     h.get("channel_24"), h.get("channel_5"), h.get("channel_6"),
+                     h.get("txpower_24"), h.get("txpower_5"), h.get("txpower_6"),
+                     h.get("clock_skew")),
                 )
 
         if write_samples:
@@ -267,6 +320,7 @@ def record(path, snap, retention_days, sample_interval,
         conn.execute("DELETE FROM client_samples WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM ap_health WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM channel_overlap_events WHERE ts < ?", (cutoff,))
+        conn.execute("DELETE FROM ap_misc_events WHERE ts < ?", (cutoff,))
         conn.execute("DELETE FROM client_loc WHERE last_ts < ?", (cutoff,))
     return new_events
 
@@ -451,7 +505,8 @@ def health(path, hours):
         rows = conn.execute(
             "SELECT ts, ap, uptime, load1, mem_total, mem_avail, temp, "
             "noise_24, noise_5, noise_6, util_24, util_5, util_6, "
-            "overlay_total, overlay_avail, channel_24, channel_5, channel_6 FROM ap_health "
+            "overlay_total, overlay_avail, channel_24, channel_5, channel_6, "
+            "txpower_24, txpower_5, txpower_6, clock_skew FROM ap_health "
             "WHERE ts >= ? ORDER BY ts",
             (start,),
         ).fetchall()
@@ -464,7 +519,9 @@ def health(path, hours):
                           "temp": [], "noise_24": [], "noise_5": [], "noise_6": [],
                           "util_24": [], "util_5": [], "util_6": [],
                           "overlay_used_pct": [], "overlay_avail_mb": [],
-                          "channel_24": [], "channel_5": [], "channel_6": []}
+                          "channel_24": [], "channel_5": [], "channel_6": [],
+                          "txpower_24": [], "txpower_5": [], "txpower_6": [],
+                          "clock_skew": []}
         s = series[ap]
         s["ts"].append(r["ts"])
         s["uptime"].append(r["uptime"])
@@ -489,6 +546,10 @@ def health(path, hours):
         s["channel_24"].append(r["channel_24"])
         s["channel_5"].append(r["channel_5"])
         s["channel_6"].append(r["channel_6"])
+        s["txpower_24"].append(r["txpower_24"])
+        s["txpower_5"].append(r["txpower_5"])
+        s["txpower_6"].append(r["txpower_6"])
+        s["clock_skew"].append(r["clock_skew"])
     return {"aps": aps, "series": series}
 
 
@@ -513,6 +574,9 @@ def events(path, limit=100):
             "NULL, NULL, NULL, NULL, band, NULL, (ap1 || ' + ' || ap2), "
             "CASE overlapping WHEN 1 THEN ('ch' || channel1 || ' / ch' || channel2) ELSE NULL END "
             "FROM channel_overlap_events "
+            "UNION ALL "
+            "SELECT ts, kind, NULL, NULL, NULL, NULL, band, NULL, ap, detail "
+            "FROM ap_misc_events "
             "ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()

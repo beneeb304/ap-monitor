@@ -42,6 +42,8 @@ printf '==THERMAL==\n'
 cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null
 printf '==OVERLAY==\n'
 df -k /overlay 2>/dev/null | tail -n +2
+printf '==CLOCK==\n'
+date +%s 2>/dev/null
 """
 
 _SURVEY_CMD = (
@@ -181,7 +183,8 @@ def _parse_health(text):
     h, mem, temps, mode = {}, {}, [], None
     for line in text.split("==HEALTH==", 1)[1].splitlines():
         line = line.strip()
-        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO==", "==THERMAL==", "==OVERLAY=="):
+        if line in ("==UPTIME==", "==LOADAVG==", "==MEMINFO==", "==THERMAL==",
+                    "==OVERLAY==", "==CLOCK=="):
             mode = line.strip("=")
             continue
         if not line:
@@ -206,6 +209,11 @@ def _parse_health(text):
                 if len(parts) >= 6:
                     h["overlay_total_kb"] = int(parts[-5])
                     h["overlay_avail_kb"] = int(parts[-3])
+            elif mode == "CLOCK":
+                # The AP's own wall clock, for skew detection: a stuck clock
+                # (found in production: no DNS -> NTP never synced -> 9 days
+                # behind) silently corrupts the AP's logs and certificates.
+                h["clock_ts"] = int(line)
         except (ValueError, IndexError):
             continue
     if mem:
@@ -261,6 +269,7 @@ def poll_device(device, cfg, include_survey=True):
 
     clients = []
     noise_by_band, util_by_band, channel_by_band = {}, {}, {}
+    txpower_by_band = {}
     band_key = {"2.4 GHz": "24", "5 GHz": "5", "6 GHz": "6"}
     for dev, info, assoc, survey in blocks:
         ssid = info.get("ssid", "")
@@ -275,6 +284,12 @@ def poll_device(device, cfg, include_survey=True):
         # mesh/repeater setups.
         if channel and bk and info.get("mode") == "Master":
             channel_by_band[f"channel_{bk}"] = channel
+        # Transmit power (dBm), same Master-mode filter: a silent power drop
+        # (driver update, regulatory change) shrinks coverage with no other
+        # symptom, so it's worth tracking alongside the channel.
+        txp = info.get("txpower")
+        if txp and bk and info.get("mode") == "Master":
+            txpower_by_band[f"txpower_{bk}"] = txp
         # Radio noise floor (dBm); 0/None means the driver doesn't report it.
         # Keep the worst (highest) value if two radios share a band.
         n = info.get("noise")
@@ -308,8 +323,15 @@ def poll_device(device, cfg, include_survey=True):
                 "rx_mbps": round(rx.get("rate", 0) / 1000) if rx.get("rate") else None,
                 "tx_mbps": round(tx.get("rate", 0) / 1000) if tx.get("rate") else None,
             })
-    if noise_by_band or util_by_band or channel_by_band:
-        health = {**(health or {}), **noise_by_band, **util_by_band, **channel_by_band}
+    if noise_by_band or util_by_band or channel_by_band or txpower_by_band:
+        health = {**(health or {}), **noise_by_band, **util_by_band,
+                  **channel_by_band, **txpower_by_band}
+    # Clock skew (AP wall clock minus ours, seconds). Computed here rather
+    # than stored as a raw timestamp so it flows uniformly to the DB, the
+    # dashboard, and MQTT. A few seconds of SSH latency is noise; the alarm
+    # threshold (60s, in db.record) is far above it.
+    if health is not None and health.get("clock_ts") is not None:
+        health["clock_skew"] = health.pop("clock_ts") - int(time.time())
     return clients, health, None
 
 

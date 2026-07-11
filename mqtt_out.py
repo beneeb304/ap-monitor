@@ -102,6 +102,18 @@ class Publisher:
                                                    "entity_category": "diagnostic"}),
                 ("channel_5", "Channel 5 GHz", {"icon": "mdi:access-point",
                                                 "entity_category": "diagnostic"}),
+                ("txpower_24", "TX power 2.4 GHz", {"state_class": "measurement",
+                                                    "unit_of_measurement": "dBm",
+                                                    "icon": "mdi:antenna",
+                                                    "entity_category": "diagnostic"}),
+                ("txpower_5", "TX power 5 GHz", {"state_class": "measurement",
+                                                 "unit_of_measurement": "dBm",
+                                                 "icon": "mdi:antenna",
+                                                 "entity_category": "diagnostic"}),
+                ("clock_skew", "Clock skew", {"device_class": "duration",
+                                              "state_class": "measurement",
+                                              "unit_of_measurement": "s",
+                                              "entity_category": "diagnostic"}),
             ]
             if self._channel_utilization:
                 sensors += [
@@ -160,7 +172,8 @@ class Publisher:
                     self._client.publish(f"{self._base}/{slug}/overlay_used_pct",
                                          str(pct), retain=True)
                 for band_key in ("noise_24", "noise_5", "util_24", "util_5",
-                                "channel_24", "channel_5"):
+                                "channel_24", "channel_5",
+                                "txpower_24", "txpower_5", "clock_skew"):
                     if h.get(band_key) is not None:
                         self._client.publish(f"{self._base}/{slug}/{band_key}",
                                              str(h[band_key]), retain=True)

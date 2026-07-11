@@ -276,6 +276,62 @@ def test_health_missing_for_offline_ap_skipped_without_error(db_path):
     db.record(db_path, snap, 7, 30)  # must not raise
 
 
+# --- channel-drift + clock-skew events (pinned-channel deployments) --------
+
+def _rf_snap(ts, ch24=6, ch5=149, skew=None):
+    h = {"uptime_s": ts, "channel_24": ch24, "channel_5": ch5}
+    if skew is not None:
+        h["clock_skew"] = skew
+    return {"updated": ts, "clients": [], "devices": [
+        {"name": "Flint2", "client_count": 0, "health": h}]}
+
+
+def test_channel_change_emits_event_per_band(db_path):
+    db.record(db_path, _rf_snap(1000), 7, 30)         # first sample: no event
+    ev = db.record(db_path, _rf_snap(1040), 7, 30)     # unchanged: no event
+    assert ev == []
+    ev = db.record(db_path, _rf_snap(1080, ch5=60), 7, 30)  # 5 GHz drifted
+    assert len(ev) == 1
+    assert ev[0]["kind"] == "channel_changed" and ev[0]["band"] == "5 GHz"
+    assert ev[0]["from_channel"] == 149 and ev[0]["to_channel"] == 60
+    # Stays on the new channel: no repeat event.
+    ev = db.record(db_path, _rf_snap(1120, ch5=60), 7, 30)
+    assert ev == []
+
+
+def test_channel_change_shows_in_events_feed(db_path):
+    db.record(db_path, _rf_snap(1000), 7, 30)
+    db.record(db_path, _rf_snap(1040, ch24=8), 7, 30)
+    row = next(e for e in db.events(db_path) if e["kind"] == "channel_changed")
+    assert row["ap"] == "Flint2" and row["band"] == "2.4 GHz"
+    assert row["error"] == "ch6 → ch8"
+
+
+def test_clock_skew_event_edge_triggered_not_per_sample(db_path):
+    ev = db.record(db_path, _rf_snap(1000, skew=3), 7, 30)   # healthy
+    assert ev == []
+    ev = db.record(db_path, _rf_snap(1040, skew=-777600), 7, 30)  # 9 days behind
+    assert len(ev) == 1 and ev[0]["kind"] == "clock_skew" and ev[0]["skew_s"] == -777600
+    ev = db.record(db_path, _rf_snap(1080, skew=-777590), 7, 30)  # still bad: silent
+    assert ev == []
+    ev = db.record(db_path, _rf_snap(1120, skew=2), 7, 30)   # recovered: silent
+    assert ev == []
+    ev = db.record(db_path, _rf_snap(1160, skew=900), 7, 30)  # bad again: re-fires
+    assert len(ev) == 1 and ev[0]["kind"] == "clock_skew"
+
+
+def test_clock_skew_bad_on_very_first_sample_fires(db_path):
+    ev = db.record(db_path, _rf_snap(1000, skew=-777600), 7, 30)
+    assert len(ev) == 1 and ev[0]["kind"] == "clock_skew"
+
+
+def test_reboot_now_shows_in_events_feed(db_path):
+    db.record(db_path, _health_snap(1000, 5000), 7, 30)
+    db.record(db_path, _health_snap(1040, 12), 7, 30)  # uptime went backwards
+    row = next(e for e in db.events(db_path) if e["kind"] == "ap_reboot")
+    assert row["ap"] == "Flint2"
+
+
 # --- health() series: uptime/load/memory/temp/noise/util/overlay ----------
 
 def test_health_series_uptime_load_memory(db_path):
@@ -305,6 +361,17 @@ def test_health_series_temp_noise_util_overlay_channel(db_path):
     assert s["overlay_used_pct"] == [round((1 - 12032 / 15104) * 100, 1)]
     assert s["overlay_avail_mb"] == [round(12032 / 1024, 1)]
     assert s["channel_24"] == [6] and s["channel_5"] == [36] and s["channel_6"] == [None]
+
+
+def test_health_series_txpower_and_clock_skew(db_path):
+    snap = {"updated": 1000, "clients": [], "devices": [
+        {"name": "Flint2", "client_count": 0,
+         "health": {"uptime_s": 600, "txpower_24": 26, "txpower_5": 24,
+                    "clock_skew": -4}}]}
+    db.record(db_path, snap, 7, 30)
+    s = db.health(db_path, hours=10**6)["series"]["Flint2"]
+    assert s["txpower_24"] == [26] and s["txpower_5"] == [24] and s["txpower_6"] == [None]
+    assert s["clock_skew"] == [-4]
 
 
 def test_health_series_ap_without_overlay_data_is_none(db_path):
