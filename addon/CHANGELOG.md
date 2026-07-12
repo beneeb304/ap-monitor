@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.19.2
+
+- The history reset from 1.19.1 is now a **"Reset history…" button** on the
+  dashboard's Events panel (small and out of the way — it's a destructive
+  action). Clicking it shows a confirmation spelling out exactly what gets
+  deleted (events feed, outage log + uptime %, health charts, signal
+  history), what's kept (device names, seen-device records — no NEW-device
+  re-announcements, no presence blip), and the intended use-case: you've
+  deliberately re-tuned the network and the old history no longer describes
+  it. Cancel does nothing; confirm clears and refreshes every panel.
+
 ## 1.19.1
 
 - New `POST /api/reset_history` endpoint: clears all events and history —

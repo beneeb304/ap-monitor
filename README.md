@@ -244,6 +244,7 @@ The Health tab (and the matching HA sensors) are diagnostic tools; here's what t
 - `GET /api/outages?hours=168` — per-AP uptime % and outage list over the window, reconstructed from AP up/down events
 - `GET /api/client/<mac>?hours=24` — one device's signal/AP samples, roam history, first/last seen
 - `POST /api/name` — set/clear a custom device name (JSON `{ "mac": "...", "name": "..." }`)
+- `POST /api/reset_history` — clear all events + history, keeping device names and seen-device records (JSON `{ "confirm": "reset" }` required). Also available as the "Reset history…" button on the dashboard's Events panel. Use after deliberately re-tuning the network, when old history no longer describes it
 
 ## Testing
 

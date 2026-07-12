@@ -63,6 +63,9 @@
   .event { padding: 7px 0; border-bottom: 1px solid #20262f; font-size: 13px; cursor: pointer; }
   .event .t { color: #8a93a3; font-size: 11px; }
   .event .arrow { color: #ffc857; }
+  .panel-hrow { display: flex; justify-content: space-between; align-items: baseline; }
+  .btn-danger-quiet { background: none; border: 1px solid #2c3442; color: #8a93a3; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+  .btn-danger-quiet:hover { border-color: #ff6b6b; color: #ff6b6b; }
   .ev-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .evf { padding: 3px 9px; border-radius: 6px; background: #1d232e; border: 1px solid #2c3442; color: #8a93a3; font-size: 11px; cursor: pointer; user-select: none; }
   .evf:hover { border-color: #3a4f7e; }
@@ -118,7 +121,11 @@
     <div id="view-health" style="display:none"></div>
   </div>
   <div class="panel">
-    <h3>Events</h3>
+    <div class="panel-hrow">
+      <h3>Events</h3>
+      <button id="resetHistory" class="btn-danger-quiet"
+              title="Clear all events and history (keeps device names)">Reset history…</button>
+    </div>
     <div id="event-filters" class="ev-filters"></div>
     <div id="events"><span class="muted">None yet.</span></div>
   </div>
@@ -473,6 +480,33 @@ document.querySelectorAll(".win").forEach(b => b.addEventListener("click", () =>
 }));
 document.getElementById("search").addEventListener("input", refreshClients);
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+async function resetHistory(){
+  const msg =
+    "Reset ALL history?\n\n" +
+    "This permanently deletes:\n" +
+    "  • the events feed (roams, flapping, new devices, AP up/down, channel events)\n" +
+    "  • the outage log and 7-day uptime %\n" +
+    "  • health charts and per-client signal history\n\n" +
+    "Kept: your device names and seen-device records — so devices will NOT " +
+    "re-announce as NEW and presence tracking is unaffected.\n\n" +
+    "Use this after deliberately re-tuning the network (channels, power, APs), " +
+    "when the old history no longer describes it. This cannot be undone.";
+  if(!confirm(msg)) return;
+  const btn = document.getElementById("resetHistory");
+  try{
+    const r = await fetch("api/reset_history", { method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({confirm: "reset"}) });
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    btn.textContent = "history cleared ✓";
+  }catch(e){
+    btn.textContent = "reset failed";
+  }
+  setTimeout(() => { btn.textContent = "Reset history…"; }, 4000);
+  refreshClients(); refreshEvents(); refreshHistory(); refreshHealth();
+}
+document.getElementById("resetHistory").addEventListener("click", resetHistory);
 
 renderEventFilters();
 refreshClients(); refreshHistory(); refreshEvents();
