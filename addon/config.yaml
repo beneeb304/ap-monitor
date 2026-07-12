@@ -1,6 +1,6 @@
 # Home Assistant add-on manifest for AP Monitor.
 name: AP Monitor
-version: "1.19.2"
+version: "1.19.3"
 slug: ap_monitor
 description: Live wifi client → access-point monitoring for OpenWrt / GL.iNet
 url: https://github.com/beneeb304/ap-monitor
@@ -30,8 +30,10 @@ ingress_port: 8088
 # TCP listener still accepts but no HTTP response comes back. If the user
 # enables the Watchdog toggle on the add-on page, Supervisor restarts the
 # add-on when this check fails, so a wedge self-heals instead of staying down.
-# A 401 (auth on) is a valid response, so a healthy app passes regardless.
-watchdog: "http://[HOST]:[PORT:8088]/"
+# Must point at /health (unauthenticated liveness probe): pointing it at "/"
+# with Basic Auth enabled returns 401, which Supervisor reads as UNHEALTHY --
+# found in production restarting the add-on every ~5 minutes, silently.
+watchdog: "http://[HOST]:[PORT:8088]/health"
 # /share holds your config.yaml + SSH key; /data persists the history DB.
 map:
   - share:rw

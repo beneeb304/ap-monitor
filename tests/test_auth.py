@@ -89,6 +89,31 @@ def test_auth_guards_the_dashboard_page_too(tmp_path, monkeypatch):
     assert client.get("/", headers=_basic_header("ben", "s3cret")).status_code == 200
 
 
+# --- /health liveness probe --------------------------------------------------
+
+def test_health_probe_bypasses_auth(tmp_path, monkeypatch):
+    """The Supervisor watchdog GETs /health with no credentials. When this
+    returned 401 (watchdog pointed at "/" with auth on), Supervisor read the
+    add-on as unhealthy and restarted it every ~5 minutes, silently."""
+    app_module = _load_app(tmp_path, monkeypatch, CREDS)
+    resp = app_module.app.test_client().get("/health")
+    assert resp.status_code == 200
+    assert resp.get_data(as_text=True) == "ok"
+
+
+def test_health_probe_leaks_nothing(tmp_path, monkeypatch):
+    """The unauthenticated probe must stay content-free: a bare liveness
+    signal, not a data endpoint."""
+    app_module = _load_app(tmp_path, monkeypatch, CREDS)
+    body = app_module.app.test_client().get("/health").get_data(as_text=True)
+    assert body == "ok"  # exactly; any data would need auth
+
+
+def test_health_probe_works_with_auth_disabled_too(tmp_path, monkeypatch):
+    app_module = _load_app(tmp_path, monkeypatch)
+    assert app_module.app.test_client().get("/health").status_code == 200
+
+
 # --- POST /api/reset_history ------------------------------------------------
 
 def test_reset_history_requires_explicit_confirmation(tmp_path, monkeypatch):

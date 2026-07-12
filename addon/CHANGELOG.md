@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.19.3 — important fix if you use Basic Auth + the Watchdog toggle
+
+Heartbeat telemetry from a production log revealed the add-on was being
+**silently restarted every ~5 minutes** (199 restarts in one log window,
+all exactly 4 heartbeats apart, zero crashes). Cause: the 1.18.1 watchdog
+health check pointed at `/`, which returns **401** when dashboard Basic
+Auth is enabled — and Supervisor treats any non-2xx as "unhealthy" and
+restarts the add-on. The 1.18.1 changelog claimed a 401 would pass; that
+was wrong. Each restart also briefly flipped the MQTT availability topic,
+so HA entities flickered "unavailable" every few minutes.
+
+Fixed with a dedicated **`/health` liveness endpoint**: it returns a bare
+`ok` (no network data — nothing that needs auth), it's exempt from Basic
+Auth, and the watchdog now points at it. It still exercises the full WSGI
+worker path, so it detects the wedge the watchdog exists to catch.
+
+Side effect worth knowing: because the add-on never ran longer than ~5
+minutes under the restart loop, the file-descriptor leak investigation
+(1.18.2) never got a long-lived window — after this update, the heartbeat
+`fds=` trend in the log becomes meaningful again.
+
 ## 1.19.2
 
 - The history reset from 1.19.1 is now a **"Reset history…" button** on the

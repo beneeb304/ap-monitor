@@ -75,6 +75,13 @@ app = Flask(__name__, static_folder=None)
 
 @app.before_request
 def _require_auth():
+    # /health is exempt from auth: it's the Supervisor watchdog's liveness
+    # probe, and it returns a bare "ok" -- no data worth protecting. It must
+    # be reachable unauthenticated, or the watchdog reads the 401 as
+    # "unhealthy" and restarts the add-on every check cycle (found in
+    # production: 199 clean restarts at exactly ~5-minute intervals).
+    if request.path == "/health":
+        return None
     if not AUTH_ENABLED:
         return None
     auth = request.authorization
@@ -212,6 +219,15 @@ def poll_loop():
             with _lock:
                 _state["error"] = str(e)
         time.sleep(CFG["poll_interval"])
+
+
+@app.route("/health")
+def health_check():
+    """Liveness probe for the Supervisor watchdog. Deliberately unauthenticated
+    (see _require_auth) and deliberately content-free: proves the WSGI worker
+    pool is alive -- exactly what wedged during the fd-exhaustion incident --
+    without exposing any network data."""
+    return Response("ok", mimetype="text/plain")
 
 
 @app.route("/api/clients")
