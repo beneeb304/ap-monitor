@@ -22,6 +22,11 @@ ssh-copy-id -i ap_monitor.pub root@<each-device-ip>
    - `config.yaml` — your configuration (see below).
 3. Install and start this add-on. Open the dashboard from the **Open Web UI**
    button, or at `http://<home-assistant-ip>:8088`.
+4. **Recommended: enable the "Watchdog" toggle** on the add-on's Info page.
+   The add-on ships an HTTP health check (`/health` — deliberately exempt
+   from Basic Auth, since a 401 would read as "unhealthy"), so with the
+   toggle on, Supervisor automatically restarts the add-on if the dashboard
+   ever stops responding, instead of it staying down until you notice.
 
 ## Accessing the dashboard on mobile (iOS especially)
 
@@ -145,7 +150,9 @@ installed), each AP is auto-discovered as a device with:
 - `sensor.<ap>_clients` (current client count)
 - `sensor.<ap>_uptime`, `sensor.<ap>_load_1m`, `sensor.<ap>_memory_used`,
   `sensor.<ap>_temperature`, `sensor.<ap>_noise_2_4_ghz`, `sensor.<ap>_noise_5_ghz`,
-  `sensor.<ap>_overlay_used`, `sensor.<ap>_channel_2_4_ghz`, `sensor.<ap>_channel_5_ghz`
+  `sensor.<ap>_overlay_used`, `sensor.<ap>_channel_2_4_ghz`, `sensor.<ap>_channel_5_ghz`,
+  `sensor.<ap>_tx_power_2_4_ghz`, `sensor.<ap>_tx_power_5_ghz`,
+  `sensor.<ap>_clock_skew`
   (health metrics; also charted in the dashboard's **Health** tab)
 - `sensor.<ap>_channel_busy_2_4_ghz`, `sensor.<ap>_channel_busy_5_ghz` — only
   created if `channel_utilization: true` (see caveat above)
@@ -198,6 +205,14 @@ Every event is also published as JSON to a per-kind MQTT topic (not retained):
   two APs' 2.4 GHz radios are on the same/overlapping channel (or that's
   been fixed). Always on, no config — computed from each AP's own channel,
   already collected over the existing SSH session.
+- `ap_monitor/events/channel_changed` — an AP's broadcast channel differs
+  from the previous health sample. Normal under auto-channel; on a network
+  with deliberately pinned channels it means something reverted (factory
+  reset, config rollback, DFS radar fallback).
+- `ap_monitor/events/clock_skew` — an AP's wall clock drifted more than 60
+  seconds from the monitor's (one event per episode, not one per sample).
+  Usually means NTP can't sync — check the AP's DNS first, since that's the
+  most common reason NTP silently fails.
 
 Example automation — notify when a genuinely new device joins:
 

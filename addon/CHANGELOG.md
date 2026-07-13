@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.19.5 — docs refresh, no code changes
+
+- README and add-on docs caught up with everything from 1.18.x–1.19.x:
+  clock-skew and channel-drift alarms, TX-power tiles, the new HA sensors
+  (`tx_power_2_4_ghz` / `tx_power_5_ghz` / `clock_skew`) and event topics
+  (`channel_changed` / `clock_skew`), the "Reset history" button, the
+  `/health` liveness endpoint, and a new setup step recommending the
+  **Watchdog toggle** (with the why).
+- "Interpreting health metrics" gained TX power and Clock skew entries,
+  plus a note that 5 GHz channels with different numbers can still share a
+  40/80 MHz block — something the 2.4 GHz-only overlap check doesn't model.
+
 ## 1.19.4 — closes the file-descriptor saga
 
 With the watchdog restart loop fixed (1.19.3), a full ~17-hour heartbeat
