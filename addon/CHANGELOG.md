@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.19.4 — closes the file-descriptor saga
+
+With the watchdog restart loop fixed (1.19.3), a full ~17-hour heartbeat
+log finally gave a clean verdict: **no leak** — file descriptors return to
+baseline all day, threads and memory flat. The log did reveal one real
+mechanism, though: transient spikes of 110+ lingering SQLite descriptors
+during dashboard-polling bursts. Python's `sqlite3` connection context
+manager commits but famously does **not** close — connections lingered
+until garbage collection got around to them (3 fds each in WAL mode).
+Harmless at the raised limit, but very plausibly the mechanism that hit
+the original 1024 limit and wedged the dashboard.
+
+Fixed: every database connection is now explicitly closed on exit
+(transaction semantics unchanged — commit on success, rollback on error).
+Verified: 600 rapid API-style calls now leave zero lingering descriptors,
+and the full test suite (142 tests) passes.
+
 ## 1.19.3 — important fix if you use Basic Auth + the Watchdog toggle
 
 Heartbeat telemetry from a production log revealed the add-on was being

@@ -1,5 +1,6 @@
 """SQLite persistence: AP client counts, roaming + new-device events,
 per-client samples, and custom device names."""
+import contextlib
 import sqlite3
 import threading
 import time
@@ -10,11 +11,24 @@ _write_lock = threading.Lock()
 _last_sample_ts = 0
 
 
+@contextlib.contextmanager
 def _connect(path):
+    """Yield a connection inside a transaction (commit on success, rollback on
+    exception -- identical to sqlite3's own `with conn:`) and ALWAYS close it
+    on exit. sqlite3's context manager famously does NOT close, leaving the
+    connection (3 fds each in WAL mode: db + -wal + -shm) alive until GC gets
+    to it -- observed in production as transient spikes of 110+ lingering db
+    fds under dashboard-polling bursts. Explicit close caps db fds at the
+    worker-thread count. Callers keep the exact same `with _connect(path) as
+    conn:` shape."""
     conn = sqlite3.connect(path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init(path):

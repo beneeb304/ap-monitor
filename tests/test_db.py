@@ -332,6 +332,32 @@ def test_reboot_now_shows_in_events_feed(db_path):
     assert row["ap"] == "Flint2"
 
 
+# --- _connect: explicit close + preserved transaction semantics ------------
+
+def test_connect_closes_connection_on_exit(db_path):
+    """sqlite3's own `with conn:` commits but does NOT close -- lingering
+    connections (3 fds each in WAL mode) piled up to 110+ db fds under
+    dashboard-polling bursts in production. _connect must actually close."""
+    with db._connect(db_path) as conn:
+        conn.execute("SELECT 1")
+    with pytest.raises(sqlite3.ProgrammingError):
+        conn.execute("SELECT 1")  # a closed connection refuses queries
+
+
+def test_connect_commits_on_success(db_path):
+    with db._connect(db_path) as conn:
+        conn.execute("INSERT INTO device_names (mac,name,updated) VALUES ('aa','x',1)")
+    assert db.get_names(db_path) == {"aa": "x"}
+
+
+def test_connect_rolls_back_on_exception(db_path):
+    with pytest.raises(RuntimeError):
+        with db._connect(db_path) as conn:
+            conn.execute("INSERT INTO device_names (mac,name,updated) VALUES ('bb','y',1)")
+            raise RuntimeError("boom")
+    assert db.get_names(db_path) == {}
+
+
 # --- reset_history ----------------------------------------------------------
 
 def test_reset_history_clears_events_keeps_names_and_seen(db_path):
